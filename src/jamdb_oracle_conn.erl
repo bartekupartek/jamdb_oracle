@@ -187,8 +187,10 @@ send_req(login, #oraclient{env=Env,sdu=Length} = State) ->
     Data = ?ENCODER:encode_record(login, #oraclient{env=Env,sdu=Length}),
     send(State, ?TNS_CONNECT, Data);
 send_req(auth, #oraclient{env=Env,auth={Sess, Salt, DerivedSalt},seq=Task} = State) ->
-    {Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
-    send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);
+	Reason = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
+	handle_error(debug, Reason, #oraclient{});
+    %{Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
+    %send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);	
 send_req(Type, #oraclient{env=Env,req=Request,seq=Task} = State) ->
     Data = ?ENCODER:encode_record(Type, #oraclient{env=Env,req=Request,seq=get_param(Task)}),
     send(State, ?TNS_DATA, Data).
