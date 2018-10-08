@@ -10,14 +10,15 @@
 
 all() ->
 	[
-        {group, basic_operations},
-        {group, number_datatypes},
-        {group, date_datatypes},
-        {group, char_datatypes},
-        {group, raw_datatypes},
-        {group, lob_datatypes},
-        {group, rowid_datatypes},
-        {group, procedure_operations}
+        {group, basic_operations}
+        %{group, basic_operations},
+        %{group, number_datatypes},
+        %{group, date_datatypes},
+        %{group, char_datatypes},
+        %{group, raw_datatypes},
+        %{group, lob_datatypes},
+        %{group, rowid_datatypes},
+        %{group, procedure_operations}
    ].
    
 groups() ->
