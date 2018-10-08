@@ -37,10 +37,10 @@ o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits)
 o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
-    CliSess =
+    {CliSess, Pad} =
     case binary:match(SrvSess,pad(8, <<>>)) of
-        {40,8} -> pad(8, crypto:strong_rand_bytes(40));
-        _ -> crypto:strong_rand_bytes(byte_size(SrvSess))
+        {40,8} -> {pad(8, crypto:strong_rand_bytes(40)), pad};
+        _ -> {crypto:strong_rand_bytes(byte_size(SrvSess)), random}
     end,
     AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
     CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
@@ -51,7 +51,9 @@ o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey,
         undefined -> <<>>;
         _ -> jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, DerivedKey)
     end,
-    {bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
+    {debug, Pad, Bits, sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess),
+				 speedy_key, byte_size(SpeedyKey)}.
+    %{bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
 
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
