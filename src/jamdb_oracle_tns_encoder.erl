@@ -92,23 +92,24 @@ encode_record(auth, #oraclient{env=EnvOpts,req={Sess, Salt, DerivedSalt},seq=Tse
         {_Salt, undefined} -> 192;
         _ -> 256
     end,
-    {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
-    KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
-    {<<
-    ?TTI_FUN,
-    ?TTI_AUTH, Tseq,
-    1,
-    (encode_sb2(length(User)))/binary,
-    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
-    1,
-    (encode_sb2(2 + KeyInd))/binary,	    %keyval count
-    1,1,
-    (encode_str(User))/binary,
-    (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
-    (if KeyInd > 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
-    (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
-    >>,
-    KeyConn};
+	jamdb_oracle_crypt:o5logon(Logon, Bits);
+    %{AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
+    %KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
+    %{<<
+    %?TTI_FUN,
+    %?TTI_AUTH, Tseq,
+    %1,
+    %(encode_sb2(length(User)))/binary,
+    %(encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
+    %1,
+    %(encode_sb2(2 + KeyInd))/binary,	    %keyval count
+    %1,1,
+    %(encode_str(User))/binary,
+    %(encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
+    %(if KeyInd > 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
+    %(encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
+    %>>,
+    %KeyConn};
 encode_record(dty, #oraclient{req=Request}) ->
     Charset = proplists:get_value(Request, ?CHARSET, ?UTF8_CHARSET),
     <<
