@@ -43,8 +43,9 @@
 -record(logon, {
     user,
     password,
-    auth,
+    type,
     bits,
+    auth,
     salt,
     der_salt,
     key,
