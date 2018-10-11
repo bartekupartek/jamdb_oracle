@@ -17,24 +17,24 @@
 %    AuthPass = crypto:block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
 %    {bin2hexstr(AuthPass)++[N], [], []}.
 
-o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
+o5logon(#logon{type=Type, auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
     Rest1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
     Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,byte_size(Rest1),-8), IVec, CliPass),
     KeySess = <<(binary:part(Rest2,byte_size(Rest2),-8))/binary,0:64>>,
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
-o5logon(#logon{auth=Sess, salt=Salt, password=Pass}, Bits) when Bits =:= 192 ->
+    o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
+o5logon(#logon{type=Type, auth=Sess, salt=Salt, password=Pass}, Bits) when Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits});
-o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
+    o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits});
+o5logon(#logon{type=Type, auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
     Data = pbkdf2(sha512, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
     KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (hexstr2bin(Salt))/binary>>),0,32),
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits,
+    o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits,
     der_salt=DerivedSalt, der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
 
-o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
+o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
     {CliSess, Pad} =
@@ -51,7 +51,7 @@ o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey,
         undefined -> <<>>;
         _ -> jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, DerivedKey)
     end,
-    {debug, Pad, Bits, sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess),
+    {debug, Type, Pad, Bits, sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess),
 				 speedy_key, byte_size(SpeedyKey)}.
     %{bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
 
