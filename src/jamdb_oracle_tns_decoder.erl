@@ -608,10 +608,11 @@ get_value(_Key, [], _N) ->
 get_value(Key, [P | Ps], N) ->
     if element(1, P) =:= Key -> element(N, P); true -> get_value(Key, Ps, N) end.
 
+%decode_version(I) when is_integer(I) ->
+%    {(I band 4278190080) bsr 24 band 255, (I band 15728640) bsr 20 band 255,
+%    (I band 1044480) bsr 12 band 255, (I band 3840) bsr 8 band 255, I band 255};
 decode_version(undefined) -> 0;
-decode_version(Data) ->
-    L = integer_to_list(list_to_integer(Data), 16),
-    list_to_integer([hd(L)], 16).
+decode_version(Data) -> list_to_integer(Data) bsr 24.
 
 decode_rowid(Data) ->
     Rest2 = decode_next(ub1,Data),
