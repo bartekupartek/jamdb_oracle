@@ -135,8 +135,7 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length} = State, Tout) ->
             {ok, State2} = send_req(pro, State#oraclient{seq=Task,sdu=Sdu}),
             handle_login(State2, Tout);
         {ok, ?TNS_MARKER, _BinaryData} ->
-            _ = handle_req(marker, State, [], Tout),
-            disconnect(State, 0);
+            handle_req(marker, State, [], Tout);
         {ok, ?TNS_REFUSE, BinaryData} ->
             _ = handle_error(remote, BinaryData, State),
             disconnect(State, 0);
@@ -188,6 +187,7 @@ send_req(login, #oraclient{env=Env,sdu=Length} = State) ->
     send(State, ?TNS_CONNECT, Data);
 send_req(auth, #oraclient{env=Env,auth={Type, Sess, Salt, DerivedSalt},seq=Task} = State) ->
 	Reason = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Type, Sess, Salt, DerivedSalt},seq=get_param(Task)}),
+	io:format("~p~n", [erlang:now()]),
 	io:format("~p~n", [Reason]),
 	handle_error(debug, Reason, #oraclient{});
     %{Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
@@ -359,6 +359,7 @@ send(#oraclient{socket=Socket,sdu=Length} = State, PacketType, Data) ->
     end.
 
 recv(Socket, Length, Tout) ->
+    io:format("~p~n", [erlang:now()]),
     recv(Socket, Length, Tout, <<>>, <<>>).
 
 recv(Socket, Length, Acc, Data) ->
