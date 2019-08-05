@@ -36,20 +36,20 @@ o5logon(#logon{type=Type, auth=Sess, salt=Salt, der_salt=DerivedSalt, password=P
 
 o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
-    SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
+    SrvSess = crypto:block_decrypt(aes_cbc, KeySess, IVec, Sess),
     {CliSess, Pad} =
     case binary:match(SrvSess,pad(8, <<>>)) of
         {40,8} -> {pad(8, crypto:strong_rand_bytes(40)), pad};
         _ -> {crypto:strong_rand_bytes(byte_size(SrvSess)), random}
     end,
-    AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
+    AuthSess = crypto:block_encrypt(aes_cbc, KeySess, IVec, CliSess),
     CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
-    AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, pad(Pass)),
+    AuthPass = crypto:block_encrypt(aes_cbc, KeyConn, IVec, pad(Pass)),
     SpeedyKey =
     case DerivedKey of
         undefined -> <<>>;
-        _ -> jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, DerivedKey)
+        _ -> crypto:block_encrypt(aes_cbc, KeyConn, IVec, DerivedKey)
     end,
     {debug, Type, Pad, Bits, sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess),
 				 speedy_key, byte_size(SpeedyKey)}.
@@ -57,8 +57,7 @@ o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=
 
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
-    Bits = byte_size(KeyConn) * 8,
-    Data = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeyConn, IVec, hexstr2bin(Resp)),
+    Data = crypto:block_decrypt(aes_cbc, KeyConn, IVec, hexstr2bin(Resp)),
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
 	nomatch -> error;
 	_ -> ok
