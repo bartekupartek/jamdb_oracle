@@ -80,20 +80,14 @@ encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     (encode_keyval("AUTH_PID", UserPID))/binary,
     (encode_keyval("AUTH_SID", User))/binary
     >>;
-encode_record(auth, #oraclient{env=EnvOpts,req={Type, Sess, Salt, DerivedSalt},seq=Tseq}) ->
+encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
     User            = proplists:get_value(user, EnvOpts),
     Pass            = proplists:get_value(password, EnvOpts),
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
-    Logon = #logon{type=Type, auth=Sess, user=User, password=Pass, salt=Salt, der_salt=DerivedSalt},
-    Bits =
-    case {Salt, DerivedSalt} of
-        {undefined, _DerivedSalt} -> 128;
-        {_Salt, undefined} -> 192;
-        _ -> 256
-    end,
-	jamdb_oracle_crypt:o5logon(Logon, Bits);
-    %{AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
+    Logon = Request#logon{user=User, password=Pass},
+    jamdb_oracle_crypt:generate(Logon);
+    %{AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:generate(Logon),
     %KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
     %{<<
     %?TTI_FUN,
@@ -185,7 +179,7 @@ encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=Tseq}) ->
     (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
-encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
+encode_record(exec, #oraclient{type=Type,auto=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
     QueryData = encode_str(Query),
     QueryLen = if Cursor > 0 -> 0; true -> byte_size(QueryData) end,
     BindLen = length(Bind),
@@ -238,13 +232,16 @@ encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={C
         {0, DefLen, 0} -> encode_token(oac, Def, <<>>)
     end)/binary
     >>;
-encode_record(close, #oraclient{req={Cursors, Tseq2},seq=Tseq}) ->
+encode_record(pig, #oraclient{req={Request,Cursors},seq=Tseq}) ->
     <<
-    ?TTI_CLOSE,
-    ?TTI_OCCA, Tseq2,
+    ?TTI_PFN,
+    Request, Tseq,
     1,
     (encode_sb4(length(Cursors)))/binary,  %cursors count
-    (encode_array(Cursors))/binary,        %cursors
+    (encode_array(Cursors))/binary         %cursors
+    >>;
+encode_record(close, #oraclient{seq=Tseq}) ->
+    <<
     ?TTI_FUN,
     ?TTI_LOGOFF, Tseq
     >>.
