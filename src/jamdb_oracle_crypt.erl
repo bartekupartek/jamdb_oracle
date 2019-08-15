@@ -53,7 +53,7 @@ o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=
     end,
     {debug, Type, Bits, der_salt, if is_atom(DerivedSalt) -> DerivedSalt; true -> length(DerivedSalt) div 2 end,
     sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess), 
-    speedy_key, if is_atom(SpeedyKey) -> SpeedyKey; true -> byte_size(SpeedyKey) end}.
+    speedy_key, byte_size(SpeedyKey)}.
     %{bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
 
 generate(#logon{type=Type} = Logon) ->
