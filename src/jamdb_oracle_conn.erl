@@ -149,8 +149,8 @@ handle_token(<<Token, Data/binary>>, State) ->
 	?TTI_DTY -> send_req(sess, State);
 	?TTI_RPA ->
             case ?DECODER:decode_token(rpa, Data) of
-                {?TTI_SESS, Type, SessKey, Salt, DerivedSalt} ->
-		    send_req(auth, State#oraclient{auth={Type, SessKey, Salt, DerivedSalt}});
+                {?TTI_SESS, Request} ->
+		    send_req(auth, State#oraclient{auth=Request});
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
@@ -168,9 +168,16 @@ handle_error(socket, Reason, State) ->
     _ = disconnect(State, 0),
     {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
-%    io:format("~s~n", [Reason]),
+    %io:format("~s~n", [Reason]),
     {error, Type, Reason, State}.
 
+handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}, Tout) ->
+    {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
+    Pig = if length(LPig) > 0 -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
+    Pig2 = if length(LPig2) > 0 -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
+    Data = get_record(Type, [], Request, Task),
+    {ok, State2} = send(State, ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>),
+    handle_resp([], State2, Tout);
 handle_req(marker, State, Acc, Tout) ->
     {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
     handle_resp(Acc, State2, Tout);
@@ -178,22 +185,27 @@ handle_req(fob, State, Acc, Tout) ->
     {ok, State2} = send(State, ?TNS_DATA, <<?TTI_FOB>>),
     handle_resp(Acc, State2, Tout);
 handle_req(Type, #oraclient{seq=Task} = State, Request, Tout) ->
-    Data = ?ENCODER:encode_record(Type, #oraclient{req=Request,seq=get_param(Task)}),
+    Data = get_record(Type, [], Request, Task),
     {ok, State2} = send(State, ?TNS_DATA, Data),
     handle_resp([], State2, Tout).
     
+unzip(Ts) -> unzip(Ts, [], []).
+	
+unzip([{X, 0} | Ts], Xs, Ys) -> unzip(Ts, [X | Xs], Ys);
+unzip([{X, Y} | Ts], Xs, Ys) -> unzip(Ts, [X | Xs], [Y | Ys]);
+unzip([], Xs, Ys) -> {Ys, Ys ++ Xs}.
+	
 send_req(login, #oraclient{env=Env,sdu=Length} = State) ->
     Data = ?ENCODER:encode_record(login, #oraclient{env=Env,sdu=Length}),
     send(State, ?TNS_CONNECT, Data);
-send_req(auth, #oraclient{env=Env,auth={Type, Sess, Salt, DerivedSalt},seq=Task} = State) ->
-	Reason = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Type, Sess, Salt, DerivedSalt},seq=get_param(Task)}),
-	io:format("~p~n", [erlang:now()]),
-	io:format("~p~n", [Reason]),
-	handle_error(debug, Reason, #oraclient{});
-    %{Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
-    %send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);	
+send_req(auth, #oraclient{env=Env,auth=Request,seq=Task} = State) ->
+    Debug = get_record(auth, Env, Request, Task),
+    io:format("~p~n", [{Debug}]),
+    handle_error(debug, Debug, #oraclient{});
+    %{Data, KeyConn} = get_record(auth, Env, Request, Task),
+    %send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);
 send_req(Type, #oraclient{env=Env,req=Request,seq=Task} = State) ->
-    Data = ?ENCODER:encode_record(Type, #oraclient{env=Env,req=Request,seq=get_param(Task)}),
+    Data = get_record(Type, Env, Request, Task),
     send(State, ?TNS_DATA, Data).
 
 send_req(close, #oraclient{server=0,seq=Task} = State, _Tout) ->
@@ -202,26 +214,33 @@ send_req(close, #oraclient{server=0,seq=Task} = State, _Tout) ->
 send_req(close, #oraclient{auto=0} = State, Tout) ->
     _ = handle_req(tran, State, ?TTI_ROLLBACK, Tout),
     send_req(close, State#oraclient{auto=1}, Tout);
-send_req(close, #oraclient{cursors=Cursors,seq=Task} = State, Tout) ->
-    _ = handle_req(close, State, {[get_result(DefCol) || DefCol <- get_result(Cursors)], get_param(Task)}, Tout),
+send_req(close, #oraclient{cursors=Cursors} = State, Tout) ->
+    _ = handle_req(pig, State, {close, 0}, Tout),
     exit(Cursors, ok),
     send_req(close, State#oraclient{server=0}, Tout);
-send_req(fetch, #oraclient{auto=Auto,server=Ver,fetch=Fetch,seq=Task} = State, {Cursor, RowFormat}) ->
-    Data = ?ENCODER:encode_record(exec, #oraclient{req={Cursor, [], [], [], RowFormat},
-	type=fetch, auth=Auto, fetch=Fetch, server=Ver, seq=get_param(Task)}),
+send_req(reset, #oraclient{cursors=Cursors} = State, Tout) ->
+    handle_req(pig, State, {tran, ?TTI_PING}, Tout),
+    Cursors ! {set, []};
+send_req(fetch, #oraclient{seq=Task} = State, {Cursor, RowFormat}) ->
+    Data = get_record(exec, State#oraclient{type=fetch}, {Cursor, [], [], [], RowFormat}, Task),
     send(State, ?TNS_DATA, Data);
-send_req(fetch, #oraclient{fetch=Fetch,seq=Task} = State, Cursor) ->
-    Data = ?ENCODER:encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=get_param(Task)}),
+send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
+    Data = get_record(fetch, State, Cursor, Task),
     send(State, ?TNS_DATA, Data);
 send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
     Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
         string:tokens(Query," \t;,)")),
-    send_req(exec, State, {Query, get_param(Data, Bind, []), Batch});
-send_req(exec, #oraclient{auto=Auto,fetch=Fetch,server=Ver,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    {Type, Fetch2, DefCol} = get_param(type, {Query, [B || {out, B} <- Bind], Fetch, Cursors}),
-    Data = ?ENCODER:encode_record(exec, #oraclient{req={get_result(DefCol), Query,
-	[get_param(data, B) || B <- Bind], Batch, []}, type=Type, auth=Auto, fetch=Fetch2, server=Ver, seq=get_param(Task)}),
-    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
+    send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
+send_req(exec, #oraclient{fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
+    {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")), [B || {out, B} <- Bind], Fetch}),
+    DefCol = get_param(defcols, {Query, Cursors}),
+    {LCursor, Cursor} = get_param(defcols, DefCol),
+    Pig = if Cursor > 0 -> get_record(pig, [], {?TTI_CANA, [Cursor]}, Task); true -> <<>> end,
+    Pig2 = if Cursor > 0 -> get_record(pig, [], {?TTI_OCCA, [Cursor]}, Task); true -> <<>> end,
+    Data = get_record(exec, State#oraclient{type=Type,fetch=Fetch2}, {LCursor, if LCursor =:= 0 -> Query; true -> [] end,
+        [get_param(data, B) || B <- Bind], Batch, []}, Task),
+    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]},
+        ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>).
 	
 handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
     case recv(Socket, Length, Tout) of
@@ -235,22 +254,36 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
     case ?DECODER:decode_token(Data, Acc) of
-	{0, RowNumber, Cursor, {Cursor2, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->          %defcols
-	    {ok, State2} = send_req(fetch, State, {Cursor, case RowNumber of 0 -> RowFormat; _ -> [] end}),
-	    #oraclient{defcols=DefCol} = State2,
-       	    handle_resp({Cursor, RowFormat, []},
-	    State2#oraclient{defcols=get_result(DefCol, {Cursor2, RowFormat}, Cursors)}, Tout);
-	{RetCode, RowNumber, Cursor, {Cursor2, RowFormat}, Rows} ->
+	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
+	    {Type2, Request} =
+	    case LCursor =:= Cursor of
+	       true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
+	       _ -> {cursor, Cursor}
+	    end,
+	    {ok, State2} = send_req(fetch, State, Request),
+	    #oraclient{auto=Auto, defcols=DefCol} = State2,
+	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2}, Tout);
+	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
 		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
-		Result ->
-		    #oraclient{defcols=DefCol} = State,
-		    _ = get_result(DefCol, {Cursor2, RowFormat}, Cursors),
-		    erlang:append_element(Result, State)
+		{ok, _} = Result ->
+		    #oraclient{auto=Auto, defcols=DefCol} = State,
+		    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
+			{reset, _} -> send_req(reset, State, Tout);
+			_ -> more
+		    end,
+		    erlang:append_element(Result, State);
+		{error, Result} ->
+		    case get_result(Cursors) of
+			[] -> more;
+			_ -> send_req(reset, State, Tout)
+		    end,
+		    {ok, Result, State}
 	    end;
 	{ok, Result} -> %tran
 	    {ok, Result, State};
@@ -260,6 +293,10 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	    handle_error(remote, Reason, State)
     end.
 
+get_result(cursor, 0, _RowNumber, _RowFormat, _Rows) ->
+    more;
+get_result(cursor, 1405, _RowNumber, _Reason, Rows) ->
+    {error, [{proc_result, 1405, Rows}]};
 get_result(change, 0, RowNumber, _RowFormat, []) ->
     {ok, [{affected_rows, RowNumber}]};
 get_result(return, 0, _RowNumber, _RowFormat, Rows) ->
@@ -268,27 +305,26 @@ get_result(block, 0, _RowNumber, _RowFormat, Rows) ->
     {ok, [{proc_result, 0, [Rows]}]};
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
-get_result(_Type, RetCode, _RowNumber, Reason, []) when RetCode =/= 1403 ->
-%    io:format("~s~n", [Reason]),
-    {ok, [{proc_result, RetCode, Reason}]};
-get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
-    case RetCode of
-	1403 -> 
-	    Column = [get_result(Fmt) || Fmt <- RowFormat],
-	    {ok, [{result_set, Column, [], Rows}]};
-	_ -> more
-    end.
+get_result(_Type, 1403, _RowNumber, RowFormat, Rows) ->
+    Column = [get_result(Fmt) || Fmt <- RowFormat],
+    {ok, [{result_set, Column, [], Rows}]};
+get_result(_Type, RetCode, _RowNumber, Reason, []) ->
+    %io:format("~s~n", [Reason]),
+    {error, [{proc_result, RetCode, Reason}]};
+get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
+    more.
 
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
-get_result({_Sum, {Cursor, _RowFormat}}) -> Cursor;
 get_result(#format{column_name=Column}) -> Column.
 
-get_result({Sum, {0, _RowFormat}}, {Cursor, RowFormat}, Cursors) when is_pid(Cursors) ->
+get_result(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
-    DefCol = {Sum, {Cursor, RowFormat}},
-    Cursors ! {set, [DefCol|Acc]},
-    DefCol;
-get_result(DefCol, {_Cursor, _RowFormat}, _Cursors) -> DefCol.
+    DefCol = {Sum, Result},
+    case length(Acc) > 127 of
+	true when Auto =:= 1 -> {reset, DefCol};
+	_ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
+    end;
+get_result(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
 
 get_param(Task) when is_pid(Task) ->
     Task ! {get, self()},
@@ -298,21 +334,19 @@ get_param(Task) when is_pid(Task) ->
 get_param([], _M, Acc) -> Acc;
 get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
 
-get_param(defcols, {Query, Cursors}) ->
+get_param(defcols, {Query, Cursors}) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
     Sum = erlang:crc32(unicode:characters_to_binary(Query)),
-    {Cursor, RowFormat} = proplists:get_value(Sum, Acc, {0,[]}),
-    {Sum, {Cursor, RowFormat}};
-get_param(defcols, {{_Sum, {0, _RowFormat}}, Ver, RowFormat, Type}) ->
+    {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
+get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
+get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
+get_param(defcols, {{_Sum, {LCursor, Cursor, _RowFormat}}, Ver, RowFormat, Type}) when LCursor =:= 0; LCursor =/= Cursor ->
     {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {_Cursor, RowFormat}} , Ver, _RowFormat, Type}) when Type =/= select ->
+get_param(defcols, {{_Sum, {_LCursor, _Cursor, RowFormat}}, Ver, _RowFormat, Type}) when Type =/= select ->
     {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {Cursor, RowFormat}} , _Ver, _RowFormat, Type}) ->
-    {Cursor, RowFormat, Type};
-get_param(type, {Query, Bind, Fetch, Cursors}) ->
-    Value = lists:nth(1, string:tokens(string:to_upper(Query)," \t")),
-    DefCol = get_param(defcols, {Query, Cursors}),
-    erlang:append_element(get_param(type, {Value, Bind, Fetch}), DefCol);
+get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Type}) ->
+    {LCursor, RowFormat, Type};
+get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
 get_param(type, {_Value, [], _Fetch}) -> {change, 0};
@@ -328,6 +362,11 @@ get_param(format, Data) -> get_param(in, Data);
 get_param(Type, Data) ->
     {<<>>, DataType, Length, Scale, Charset} = ?DECODER:decode_helper(param, Data),
     #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
+
+get_record(Type, State, Request, Task) when is_record(State, oraclient) ->
+    ?ENCODER:encode_record(Type, State#oraclient{req=Request, seq=get_param(Task)});
+get_record(Type, Env, Request, Task) ->
+    ?ENCODER:encode_record(Type, #oraclient{env=Env, req=Request, seq=get_param(Task)}).
 
 sock_renegotiate(Socket, _Opts, _Tout) when is_port(Socket) -> {ok, Socket};
 sock_renegotiate(Socket, Opts, Tout) ->
@@ -359,7 +398,6 @@ send(#oraclient{socket=Socket,sdu=Length} = State, PacketType, Data) ->
     end.
 
 recv(Socket, Length, Tout) ->
-    io:format("~p~n", [erlang:now()]),
     recv(Socket, Length, Tout, <<>>, <<>>).
 
 recv(Socket, Length, Acc, Data) ->
@@ -395,4 +433,3 @@ recv(Socket, Length, Tout, Acc, Data) ->
                     {error, socket, Reason}
             end
     end.
-
