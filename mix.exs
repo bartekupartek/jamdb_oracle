@@ -3,8 +3,8 @@ defmodule Jamdb.Oracle.Mixfile do
 
   def project do
     [app: :jamdb_oracle,
-     version: "0.1.6",
-     elixir: "~> 1.4",
+     version: "0.3.4",
+     elixir: "~> 1.5",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      description: description(),
@@ -14,9 +14,8 @@ defmodule Jamdb.Oracle.Mixfile do
 
   defp deps do
     [
-      {:ecto, "~> 2.1"},
-      {:db_connection, "~> 1.1"},
-      {:ex_doc, "~> 0.18", only: :docs}
+      {:ecto_sql, "~> 3.0"},
+      {:ex_doc, "~> 0.19", only: :docs}
     ]
   end
 
@@ -25,7 +24,7 @@ defmodule Jamdb.Oracle.Mixfile do
   end
 
   defp package do
-    [files: ["src","include","lib","config","test","rebar.config","mix.exs"],
+    [files: ["src","include","lib","mix.exs"],
     maintainers: ["Mykhailo Vstavskyi","Sergiy Kostyushkin"],
     licenses: ["MIT"],
     links: %{"Github" => "https://github.com/erlangbureau/jamdb_oracle"}]
