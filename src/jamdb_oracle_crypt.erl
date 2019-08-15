@@ -1,6 +1,6 @@
 -module(jamdb_oracle_crypt).
 
--export([o5logon/2]).
+-export([generate/1]).
 -export([validate/2]).
 
 -include("jamdb_oracle.hrl").
@@ -24,10 +24,10 @@ o5logon(#logon{type=Type, auth=Sess, der_salt=DerivedSalt, user=User, password=P
     Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,byte_size(Rest1),-8), IVec, CliPass),
     KeySess = <<(binary:part(Rest2,byte_size(Rest2),-8))/binary,0:64>>,
     o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
-o5logon(#logon{type=Type, auth=Sess, salt=Salt, password=Pass}, Bits) when Bits =:= 192 ->
+o5logon(#logon{type=Type, auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
-    o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits});
+    o5logon(#logon{type=Type, auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{type=Type, auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
     Data = pbkdf2(sha512, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
     KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (hexstr2bin(Salt))/binary>>),0,32),
@@ -37,10 +37,10 @@ o5logon(#logon{type=Type, auth=Sess, salt=Salt, der_salt=DerivedSalt, password=P
 o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
     SrvSess = crypto:block_decrypt(aes_cbc, KeySess, IVec, Sess),
-    {CliSess, Pad} =
+    CliSess =
     case binary:match(SrvSess,pad(8, <<>>)) of
-        {40,8} -> {pad(8, crypto:strong_rand_bytes(40)), pad};
-        _ -> {crypto:strong_rand_bytes(byte_size(SrvSess)), random}
+        {40,8} -> pad(8, crypto:strong_rand_bytes(40));
+        _ -> crypto:strong_rand_bytes(byte_size(SrvSess))
     end,
     AuthSess = crypto:block_encrypt(aes_cbc, KeySess, IVec, CliSess),
     CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
@@ -51,9 +51,19 @@ o5logon(#logon{type=Type, auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=
         undefined -> <<>>;
         _ -> crypto:block_encrypt(aes_cbc, KeyConn, IVec, DerivedKey)
     end,
-    {debug, Type, Pad, Bits, sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess),
-				 speedy_key, byte_size(SpeedyKey)}.
+    {debug, Type, Bits, der_salt, if is_atom(DerivedSalt) -> DerivedSalt; true -> length(DerivedSalt) div 2 end,
+    sess_key, byte_size(SrvSess), auth_pass, byte_size(AuthPass), auth_sess, byte_size(AuthSess), 
+    speedy_key, if is_atom(SpeedyKey) -> SpeedyKey; true -> byte_size(SpeedyKey) end}.
     %{bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
+
+generate(#logon{type=Type} = Logon) ->
+    Bits =
+    case Type of
+        2361 -> 128;
+        6949 -> 192;
+        18453 -> 256
+    end,
+    o5logon(Logon, Bits).
 
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
@@ -72,17 +82,13 @@ conn_key(Data, undefined, Bits) when Bits =:= 128 ->
 conn_key(Data, undefined, Bits) when Bits =:= 192 ->
     <<(erlang:md5(binary:part(Data,0,16)))/binary,
       (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>;
-conn_key(Data, DerivedSalt, Bits) when Bits =:= 256; Bits =:= 128 ->
+conn_key(Data, DerivedSalt, Bits) ->
     pbkdf2(sha512, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
 
-cat_key(X,Y,undefined,Bits) when Bits =:= 128 ->
-    cat_key(binary:part(X,16,16),binary:part(Y,16,16),[]);
-cat_key(X,Y,_DerivedSalt,Bits) when Bits =:= 128 ->
-    <<(binary:part(Y,0,16))/binary,(binary:part(X,0,16))/binary>>;
-cat_key(X,Y,undefined,Bits) when Bits =:= 192 ->
-    cat_key(binary:part(X,16,24),binary:part(Y,16,24),[]);
-cat_key(X,Y,_DerivedSalt,Bits) when Bits =:= 256 ->
-    <<Y/binary,X/binary>>.
+cat_key(X,Y,undefined, Bits) ->
+    cat_key(binary:part(X, 16, Bits div 8),binary:part(Y, 16, Bits div 8),[]);
+cat_key(X,Y,_DerivedSalt, Bits) ->
+    <<(binary:part(Y, 0, Bits div 8))/binary,(binary:part(X, 0, Bits div 8))/binary>>.
 
 cat_key(<<>>,<<>>,S) ->
     list_to_binary(S);
