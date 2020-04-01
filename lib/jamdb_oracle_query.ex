@@ -627,22 +627,22 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
-    ["ADD COLUMN ", quote_name(name), ?\s, column_type(ref.type, opts),
+    ["ADD ", quote_name(name), ?\s, column_type(ref.type, opts),
      column_options(ref.type, opts), reference_expr(ref, table, name)]
   end
 
   defp column_change(_table, {:add, name, type, opts}) do
-    ["ADD COLUMN ", quote_name(name), ?\s, column_type(type, opts),
+    ["ADD ", quote_name(name), ?\s, column_type(type, opts),
      column_options(type, opts)]
   end
 
   defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
-    [drop_constraint_expr(opts[:from], table, name), "ALTER COLUMN ", quote_name(name), " TYPE ", column_type(ref.type, opts),
+    [drop_constraint_expr(opts[:from], table, name), "MODIFY ", quote_name(name), " ", column_type(ref.type, opts),
      constraint_expr(ref, table, name), modify_null(name, opts), modify_default(name, ref.type, opts)]
   end
 
   defp column_change(table, {:modify, name, type, opts}) do
-    [drop_constraint_expr(opts[:from], table, name), "ALTER COLUMN ", quote_name(name), " TYPE ",
+    [drop_constraint_expr(opts[:from], table, name), "MODIFY ", quote_name(name), " ",
      column_type(type, opts), modify_null(name, opts), modify_default(name, type, opts)]
   end
 
@@ -654,9 +654,12 @@ defmodule Jamdb.Oracle.Query do
 
   defp modify_null(name, opts) do
     case Keyword.get(opts, :null) do
-      true  -> [", ALTER COLUMN ", quote_name(name), " DROP NOT NULL"]
-      false -> [", ALTER COLUMN ", quote_name(name), " SET NOT NULL"]
+      true  -> [" NULL"]
+      false -> [" NOT NULL"]
       nil   -> []
+      # true  -> [", ALTER COLUMN ", quote_name(name), " DROP NOT NULL"]
+      # false -> [", ALTER COLUMN ", quote_name(name), " SET NOT NULL"]
+      # nil   -> []
     end
   end
 
