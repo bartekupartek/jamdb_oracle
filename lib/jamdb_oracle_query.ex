@@ -680,10 +680,18 @@ defmodule Jamdb.Oracle.Query do
   defp null_expr(true), do: " NULL"
   defp null_expr(_), do: []
 
+
+  defguard is_true(value) when is_boolean(value) and value
+  defguard is_false(value) when is_boolean(value) and not value
+
   defp default_expr({:ok, nil}),
     do: " DEFAULT NULL"
   defp default_expr({:ok, literal}) when is_binary(literal),
     do: [" DEFAULT '", escape_string(literal), ?']
+  defp default_expr({:ok, literal}) when is_true(literal),
+    do: [" DEFAULT 1"]
+  defp default_expr({:ok, literal}) when is_false(literal),
+    do: [" DEFAULT 0"]
   defp default_expr({:ok, literal}) when is_number(literal) or is_boolean(literal),
     do: [" DEFAULT ", to_string(literal)]
   defp default_expr({:ok, {:fragment, expr}}),
@@ -774,9 +782,10 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:bigserial),           do: "integer"
   defp ecto_to_db(:integer),             do: "integer"
   defp ecto_to_db(:float),               do: "number"
-  defp ecto_to_db(:boolean),             do: "char(1)"
+  defp ecto_to_db(:boolean),             do: "integer" #char(1)"
   defp ecto_to_db(:string),              do: "varchar2"
   defp ecto_to_db(:binary),              do: "clob"
+  defp ecto_to_db(:text),                do: "clob"
   defp ecto_to_db({:array, _}),          do: "blob"
   defp ecto_to_db(:map),                 do: "clob"
   defp ecto_to_db({:map, _}),            do: "clob"
