@@ -623,15 +623,18 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp column_changes(table, columns) do
-    if is_add_changes(columns) do
-      ["ADD(" | intersperse_map(columns, ", ", &column_change(table, &1))] ++ [")"]
-    else
-      intersperse_map(columns, ", ", &column_change(table, &1))
+    cond do
+      same_changes(:add, columns) ->
+        ["ADD(" | intersperse_map(columns, ", ", &column_change(table, &1))] ++ [")"]
+      same_changes(:remove, columns) ->
+        ["DROP(" | intersperse_map(columns, ", ", &column_change(table, &1))] ++ [")"]
+      true ->
+        intersperse_map(columns, ", ", &column_change(table, &1))
     end
   end
 
-  defp is_add_changes(columns) do
-    columns |> Enum.all?(fn (column) -> Kernel.elem(column, 0) == :add end)
+  defp same_changes(change, columns) do
+    columns |> Enum.all?(fn (column) -> Kernel.elem(column, 0) == change end)
   end
 
   defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
@@ -653,11 +656,11 @@ defmodule Jamdb.Oracle.Query do
      column_type(type, opts), modify_null(name, opts), modify_default(name, type, opts)]
   end
 
-  defp column_change(_table, {:remove, name}), do: ["DROP COLUMN ", quote_name(name)]
+  defp column_change(_table, {:remove, name}), do: [quote_name(name)]
   defp column_change(table, {:remove, name, %Reference{} = ref, _opts}) do
     [drop_constraint_expr(ref, table, name), "DROP COLUMN ", quote_name(name)]
   end
-  defp column_change(_table, {:remove, name, _type, _opts}), do: ["DROP COLUMN ", quote_name(name)]
+  defp column_change(_table, {:remove, name, _type, _opts}), do: [quote_name(name)]
 
   defp modify_null(name, opts) do
     case Keyword.get(opts, :null) do
