@@ -623,17 +623,24 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp column_changes(table, columns) do
-    intersperse_map(columns, ", ", &column_change(table, &1))
+    if is_add_changes(columns) do
+      ["ADD(" | intersperse_map(columns, ", ", &column_change(table, &1))] ++ [")"]
+    else
+      intersperse_map(columns, ", ", &column_change(table, &1))
+    end
+  end
+
+  defp is_add_changes(columns) do
+    columns |> Enum.all?(fn (column) -> Kernel.elem(column, 0) == :add end)
   end
 
   defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
-    ["ADD ", quote_name(name), ?\s, column_type(ref.type, opts),
+    [quote_name(name), ?\s, column_type(ref.type, opts),
      column_options(ref.type, opts), reference_expr(ref, table, name)]
   end
 
   defp column_change(_table, {:add, name, type, opts}) do
-    ["ADD ", quote_name(name), ?\s, column_type(type, opts),
-     column_options(type, opts)]
+    [quote_name(name), ?\s, column_type(type, opts), column_options(type, opts)]
   end
 
   defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
