@@ -672,7 +672,8 @@ defmodule Jamdb.Oracle.Query do
 
   defp modify_default(name, _type, opts) do
     case Keyword.fetch(opts, :default) do
-      {:ok, val} -> [", ALTER COLUMN ", quote_name(name), " SET", default_expr({:ok, val})]
+      {:ok, val} -> [default_expr({:ok, val})]
+      # {:ok, val} -> [", ALTER COLUMN ", quote_name(name), " SET", default_expr({:ok, val})]
       :error -> []
     end
   end
