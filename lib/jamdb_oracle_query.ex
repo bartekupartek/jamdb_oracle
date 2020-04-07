@@ -798,6 +798,7 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:binary),              do: "clob"
   defp ecto_to_db(:text),                do: "clob"
   defp ecto_to_db({:array, _}),          do: "blob"
+  defp ecto_to_db(:jsonb),               do: "blob" # use JSON
   defp ecto_to_db(:map),                 do: "clob"
   defp ecto_to_db({:map, _}),            do: "clob"
   defp ecto_to_db(:decimal),             do: "decimal"
