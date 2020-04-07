@@ -223,6 +223,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   def query(conn, query, params, opts) do
     q = query!(query, "")
     IO.inspect(q) # Always print executed SQL
+    #require IEx; IEx.pry
     case DBConnection.prepare_execute(conn, q, params, opts) do
       {:ok, _, result}  -> {:ok, result}
       {:error, err} -> {:error, err}
