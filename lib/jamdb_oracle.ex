@@ -282,7 +282,6 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(%DateTime{} = datetime), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
   defp encode(%NaiveDateTime{} = naive), do: NaiveDateTime.to_erl(naive)
   defp encode(%Ecto.Query.Tagged{value: elem}), do: elem
-  defp encode(elem) when is_binary(elem), do: elem |> to_charlist
   defp encode(elem) when is_binary(elem) do
     if String.valid?(elem) do
       elem |> to_charlist
@@ -290,7 +289,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
       elem |> Base.encode16
     end
   end
-  defp encode(elem) when is_map(elem),
+  defp encode(elem) when is_map(elem) or is_list(elem),
        do: encode(Jamdb.Oracle.json_library().encode!(elem))
   defp encode(elem), do: elem
 
