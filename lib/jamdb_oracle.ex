@@ -291,7 +291,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
       elem |> Base.encode16
     end
   end
-  defp encode(elem, charset) when is_map(elem), 
+  defp encode(elem, charset) when is_map(elem) or is_list(elem),
     do: encode(Jamdb.Oracle.json_library().encode!(elem), charset)
   defp encode(elem, _), do: elem
 
