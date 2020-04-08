@@ -697,6 +697,8 @@ defmodule Jamdb.Oracle.Query do
 
   defp default_expr({:ok, nil}),
     do: " DEFAULT NULL"
+  defp default_expr({:ok, []}),
+    do: " DEFAULT '[]'"
   defp default_expr({:ok, literal}) when is_binary(literal),
     do: [" DEFAULT '", escape_string(literal), ?']
   defp default_expr({:ok, literal}) when is_true(literal),
@@ -725,7 +727,7 @@ defmodule Jamdb.Oracle.Query do
     do: [?\s, options]
 
   defp column_type({:array, type}, opts),
-    do: [column_type(type, opts), "[]"]
+    do: [column_type(type, opts)]
 
   defp column_type(type, _opts) when type in ~w(utc_datetime naive_datetime)a,
     do: [ecto_to_db(type), "(0)"]
@@ -798,7 +800,7 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:binary),              do: "clob"
   defp ecto_to_db(:text),                do: "clob"
   defp ecto_to_db({:array, _}),          do: "blob"
-  defp ecto_to_db(:jsonb),               do: "blob" # use JSON
+  defp ecto_to_db(:jsonb),               do: "clob" # use JSON
   defp ecto_to_db(:map),                 do: "clob"
   defp ecto_to_db({:map, _}),            do: "clob"
   defp ecto_to_db(:decimal),             do: "decimal"
