@@ -212,6 +212,7 @@ end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @moduledoc false
+  require Logger
 
   @behaviour Ecto.Adapters.SQL.Connection
 
@@ -238,8 +239,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @impl true
   def query(conn, query, params, opts) do
     q = query!(query, "")
-    IO.inspect(q) # Always print executed SQL
-    #require IEx; IEx.pry
+    Logger.info(q.statement) # Always print executed SQL
+
     case DBConnection.prepare_execute(conn, q, params, opts) do
       {:ok, _, result}  -> {:ok, result}
       {:error, err} -> {:error, err}
