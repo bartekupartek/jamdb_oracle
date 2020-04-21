@@ -15,6 +15,7 @@ defmodule Jamdb.Oracle.Mixfile do
   defp deps do
     [
       {:ecto_sql, "~> 3.0"},
+      {:timex, "~> 3.5"},
       {:ex_doc, "~> 0.21", only: :docs}
     ]
   end
