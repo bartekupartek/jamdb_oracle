@@ -161,6 +161,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   @behaviour Ecto.Adapter.Storage
   @behaviour Ecto.Adapter.Structure
 
+  def dumpers({:embed, _}, type), do: [&Ecto.Adapters.SQL.dump_embed(type, &1)]
+  def dumpers({:map, _}, type),   do: [&Ecto.Adapters.SQL.dump_embed(type, &1)]
+  def dumpers(:binary_id, type),  do: [type, Ecto.UUID]
+  def dumpers(:date, type),       do: [type, &Timex.format(&1, "{0D}-{Mshort}-{YYYY}")]
+  def dumpers(_, type),           do: [type]
+
   @impl true
   def loaders({:array, _}, type), do: [&array_decode/1, type]
   def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
@@ -169,7 +175,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def loaders(:float, type),      do: [&float_decode/1, type]
   def loaders(:boolean, type),    do: [&bool_decode/1, type]
   def loaders(:binary_id, type),  do: [Ecto.UUID, type]
+  def loaders(:date, type),  do: [&date_decode/1, type]
   def loaders(_, type),           do: [type]
+
+  def date_decode(%NaiveDateTime{} = v) do
+    {:ok, NaiveDateTime.to_date(v)}
+  end
 
   defp bool_decode("0"), do: {:ok, false}
   defp bool_decode("1"), do: {:ok, true}
