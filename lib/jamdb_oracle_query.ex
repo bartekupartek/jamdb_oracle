@@ -417,8 +417,6 @@ defmodule Jamdb.Oracle.Query do
       {:binary_op, op} ->
         [left, right] = args
         [op_to_binary(left, sources, query), op | op_to_binary(right, sources, query)]
-      {:fun, "like"} ->
-        [[], intersperse_map(args, " #{fun} ", &expr(&1, sources, query))]
       {:fun, fun} ->
         [fun, ?(, [], intersperse_map(args, ", ", &expr(&1, sources, query)), ?)]
     end
