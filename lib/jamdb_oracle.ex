@@ -290,7 +290,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     end
   end
   defp encode(elem) when is_map(elem) or is_list(elem),
-       do: encode(Jamdb.Oracle.json_library().encode!(elem))
+       do: Jamdb.Oracle.json_library().encode!(elem) |> Base.encode16
   defp encode(elem), do: elem
 
   defp expr(list) when is_list(list) do
