@@ -697,8 +697,8 @@ defmodule Jamdb.Oracle.Query do
 
   defp default_expr({:ok, nil}),
     do: " DEFAULT NULL"
-  defp default_expr({:ok, []}),
-    do: " DEFAULT '[]'"
+  # defp default_expr({:ok, []}),
+    # do: " DEFAULT '[]'"
   defp default_expr({:ok, literal}) when is_binary(literal),
     do: [" DEFAULT '", escape_string(literal), ?']
   defp default_expr({:ok, literal}) when is_true(literal),
@@ -709,8 +709,8 @@ defmodule Jamdb.Oracle.Query do
     do: [" DEFAULT ", to_string(literal)]
   defp default_expr({:ok, {:fragment, expr}}),
     do: [" DEFAULT ", expr]
-  defp default_expr({:ok, value}) when is_map(value),
-    do: error!(nil, "json defaults are not supported")
+  defp default_expr({:ok, value}) when is_map(value) or is_list(value),
+    do: " DEFAULT '#{Jamdb.Oracle.json_library().encode!(value) |> Base.encode16}'"
   defp default_expr(:error),
     do: []
 
@@ -800,9 +800,9 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:binary),              do: "clob"
   defp ecto_to_db(:text),                do: "clob"
   defp ecto_to_db({:array, _}),          do: "blob"
-  defp ecto_to_db(:jsonb),               do: "clob" # use JSON
-  defp ecto_to_db(:map),                 do: "clob"
-  defp ecto_to_db({:map, _}),            do: "clob"
+  defp ecto_to_db(:jsonb),               do: "blob" # use Application.fetch_env!(:ecto_sql, :postgres_map_type)
+  defp ecto_to_db(:map),                 do: "blob" # use Application.fetch_env!(:ecto_sql, :postgres_map_type)
+  defp ecto_to_db({:map, _}),            do: "blob" # use Application.fetch_env!(:ecto_sql, :postgres_map_type)
   defp ecto_to_db(:decimal),             do: "decimal"
   defp ecto_to_db(:naive_datetime),      do: "timestamp"
   defp ecto_to_db(:time),                do: "timestamp"
