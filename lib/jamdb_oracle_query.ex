@@ -427,8 +427,8 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr(nil, _sources, _query),   do: "NULL"
-  defp expr(true, _sources, _query),  do: "TRUE"
-  defp expr(false, _sources, _query), do: "FALSE"
+  defp expr(true, _sources, _query),  do: "1"
+  defp expr(false, _sources, _query), do: "0"
 
   defp expr(literal, _sources, _query) when is_binary(literal) or is_list(literal) do
      ["'", escape_string(literal), "'"]
