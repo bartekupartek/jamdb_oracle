@@ -147,7 +147,7 @@ defmodule Jamdb.Oracle.Query do
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
       {key, value} ->
-        [expr(value, sources, query), ?\s | quote_name(key)]
+        [expr(value, sources, query), ?\s, ?"] ++ quote_name(key) ++ [?"]
       value ->
         expr(value, sources, query)
     end)
