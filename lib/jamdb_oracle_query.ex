@@ -347,9 +347,17 @@ defmodule Jamdb.Oracle.Query do
     [expr(left, sources, query), " IN (", args, ?)]
   end
 
-  defp expr({:in, _, [left, {:^, _, [_, length]}]}, sources, query) do
-    right = for ix <- 1..length, do: {:^, [], [ix]}
-    expr({:in, [], [left, right]}, sources, query)
+  # Building condition for `where(Team, [t], t.id in ^[])`
+  # in SQL it will be `WHERE (1 = 2)
+  defp expr({:in, _, [left, {:^, _, [_, 0]}]}, sources, query) do
+    "1 = 2"
+  end
+
+  # Building condition for `where(Team, [t], t.id in ^[1,2])`
+  # in SQL it will be `WHERE (t.id IN (:1, :2)) | [1,2]`
+  defp expr({:in, _, [left, {:^, _, [ix, length]}]}, sources, query) do
+    right = for s <- 1..length, do: [?:, Integer.to_string(ix + s)]
+    [expr(left, sources, query), " IN (", Enum.intersperse(right, ?,), ?)]
   end
 
   defp expr({:in, _, [left, right]}, sources, query) do
