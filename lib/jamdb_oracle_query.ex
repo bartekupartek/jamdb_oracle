@@ -699,19 +699,15 @@ defmodule Jamdb.Oracle.Query do
   defp null_expr(true), do: " NULL"
   defp null_expr(_), do: []
 
-
-  defguard is_true(value) when is_boolean(value) and value
-  defguard is_false(value) when is_boolean(value) and not value
-
   defp default_expr({:ok, nil}),
     do: " DEFAULT NULL"
   # defp default_expr({:ok, []}),
     # do: " DEFAULT '[]'"
   defp default_expr({:ok, literal}) when is_binary(literal),
     do: [" DEFAULT '", escape_string(literal), ?']
-  defp default_expr({:ok, literal}) when is_true(literal),
+  defp default_expr({:ok, true}),
     do: [" DEFAULT 1"]
-  defp default_expr({:ok, literal}) when is_false(literal),
+  defp default_expr({:ok, false}),
     do: [" DEFAULT 0"]
   defp default_expr({:ok, literal}) when is_number(literal) or is_boolean(literal),
     do: [" DEFAULT ", to_string(literal)]
