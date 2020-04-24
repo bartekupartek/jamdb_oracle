@@ -146,8 +146,12 @@ defmodule Jamdb.Oracle.Query do
     do: "NULL"
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
+      # `comment` is reserved keyword in Oracle, so we need to quote it
+      # NB: "column_name" and column_name are not equal from Oracle perspective!
+      {:comment, value} ->
+        [expr(value, sources, query), ?\s, ?"] ++ quote_name(:comment) ++ [?"]
       {key, value} ->
-        [expr(value, sources, query), ?\s, ?"] ++ quote_name(key) ++ [?"]
+        [expr(value, sources, query), ?\s | quote_name(key)]
       value ->
         expr(value, sources, query)
     end)
@@ -847,7 +851,7 @@ defmodule Jamdb.Oracle.Query do
     if String.contains?(name, "\"") do
       error!(nil, "bad field name #{inspect name}")
     end
-     [name] # identifiers are not case sensitive
+    [name] # identifiers are not case sensitive
   end
 
   defp quote_table(nil, name),    do: quote_table(name)
