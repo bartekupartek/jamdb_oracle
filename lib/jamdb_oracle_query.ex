@@ -142,14 +142,16 @@ defmodule Jamdb.Oracle.Query do
     ["SELECT ", distinct(distinct, sources, query) | select_fields(fields, sources, query)]
   end
 
+  @reserved_keywords [:comment, :size, :number, :current]
+
   defp select_fields([], _sources, _query),
     do: "NULL"
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
-      # `comment` is reserved keyword in Oracle, so we need to quote it
+      # @reserved_keywords are reserved in Oracle, so we need to quote it
       # NB: "column_name" and column_name are not equal from Oracle perspective!
-      {:comment, value} ->
-        [expr(value, sources, query), ?\s, ?"] ++ quote_name(:comment) ++ [?"]
+      {key, value} when key in @reserved_keywords ->
+        [expr(value, sources, query), ?\s, ?"] ++ quote_name(key) ++ [?"]
       {key, value} ->
         [expr(value, sources, query), ?\s | quote_name(key)]
       value ->
