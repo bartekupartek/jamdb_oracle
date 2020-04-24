@@ -436,6 +436,10 @@ defmodule Jamdb.Oracle.Query do
     end
   end
 
+  defp expr(%Decimal{} = decimal, _sources, _query) do
+    Decimal.to_string(decimal, :normal)
+  end
+
   defp expr(%Ecto.Query.Tagged{value: literal}, sources, query) do
     expr(literal, sources, query)
   end
