@@ -6,7 +6,7 @@ defmodule Jamdb.Oracle.Query do
 
   """
 
-  defstruct [:statement, :name, :batch]  
+  defstruct [:statement, :name, :batch, :query_rows_count]
 
   alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
 
@@ -52,7 +52,10 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
-  @doc false
+  def insert(_prefix, _table, _header, rows, _on_conflict, returning)
+      when length(rows) > 1 and length(returning) > 0,
+      do: raise "Batch insert doesn't support returning values!"
+
   def insert(prefix, table, header, rows, _on_conflict, returning) do
     values =
       if header == [] do
@@ -61,7 +64,11 @@ defmodule Jamdb.Oracle.Query do
         [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ") VALUES " | insert_all([header], 1)]
       end
 
-    ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
+    if length(rows) > 1 do
+      {:batch, length(header), ["INSERT INTO ", quote_table(prefix, table), values]}
+    else
+      ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
+    end
   end
 
   defp insert_all(rows, counter) do

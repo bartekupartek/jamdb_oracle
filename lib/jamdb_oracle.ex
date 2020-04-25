@@ -85,9 +85,9 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%{batch: true} = query, params, _opts, s) do
+  def handle_execute(%{batch: true, query_rows_count: query_rows_count} = query, params, _opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:batch, statement |> to_charlist, params}, []) do
+    case query(s, {:batch, statement |> to_charlist, Enum.chunk_every(params, query_rows_count)}, []) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
