@@ -558,7 +558,7 @@ defmodule Jamdb.Oracle.Query do
       quote_name(index.name),
       " ON ",
       quote_table(index.prefix, index.table), ?\s,
-      ?(, intersperse_map(index.columns, ", ", &index_expr/1), ?),
+      index_columns(index),
       if_do(command == :create_if_not_exists, :end)]]
   end
 
@@ -723,6 +723,22 @@ defmodule Jamdb.Oracle.Query do
     do: " DEFAULT '#{Jamdb.Oracle.json_library().encode!(value) |> Base.encode16}'"
   defp default_expr(:error),
     do: []
+
+  defp index_columns(%Index{where: nil, columns: columns}), do: [?(, intersperse_map(columns, ", ", &index_expr/1), ?)]
+
+  # CREATE UNIQUE INDEX billing_items_name_index ON billing_items (
+  #  case when provider_id IS NULL then id || ‘/‘ name end
+  # )
+  defp index_columns(%Index{where: where, columns: columns}) do
+    [?(,
+      "CASE WHEN ",
+      where,
+      " THEN ",
+      columns |> Enum.map(&index_expr/1) |> Enum.join(" || '/' || "),
+      " END",
+      ?)
+    ]
+  end
 
   defp index_expr(literal) when is_binary(literal),
     do: literal
