@@ -245,6 +245,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defp query!(sql, name) when is_binary(sql) or is_list(sql) do
     %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
   end
+  defp query!({:batch, rows_count, sql}, name) do
+    %Jamdb.Oracle.Query{
+      statement: IO.iodata_to_binary(sql),
+      name: name,
+      batch: true,
+      query_rows_count: rows_count
+    }
+  end
   defp query!(%{} = query, _name) do
     query
   end
