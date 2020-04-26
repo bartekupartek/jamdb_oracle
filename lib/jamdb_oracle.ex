@@ -95,17 +95,37 @@ defmodule Jamdb.Oracle do
   end
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
-    case query(s, statement |> to_charlist, Enum.concat(params, returning)) do
-      {:ok, result} -> {:ok, query, result, s}
+    with returning <- Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end),
+      {:ok, result} <- query(s, statement |> to_charlist, Enum.concat(params, returning)),
+      {:ok, result} <- recv_execute(result, query) do
+        {:ok, query, result, s}
+    else
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
 
+  defp recv_execute(result, %Jamdb.Oracle.Query{result_types: nil}), do: {:ok, result}
+  defp recv_execute(result, %Jamdb.Oracle.Query{result_types: []}), do: {:ok, result}
+  defp recv_execute(result, %Jamdb.Oracle.Query{result_types: [type | _]}) do
+    # For now we support the first type of result types
+    {:ok, %{result | rows: type.decode(result.rows)}}
+  end
+
   @impl true
-  def handle_prepare(query, _opts, s) do
+  def handle_prepare(%Jamdb.Oracle.Query{statement: statement}=query, opts, s) when is_binary(statement) do
+    result_types = recv_describe(statement, opts, s)
+    query = %Jamdb.Oracle.Query{query | result_types: result_types}
+
     {:ok, query, s}
+  end
+  def handle_prepare(query, _opts, s), do: {:ok, query, s}
+
+  defp recv_describe(statement, opts, _s) do
+    case Keyword.get(opts, :maybe) do
+      :decimal -> [Jamdb.Oracle.Extensions.Numeric]
+      _ -> []
+    end
   end
 
   @impl true
