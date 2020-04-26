@@ -285,6 +285,13 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(row, mapper), do: mapper.(decode(row, nil))
 
   defp decode(:null), do: nil
+  defp decode({elem}) when is_float(elem) do
+    if elem == round(elem) do # because Decimal.new(1) != Decimal.new(1.0)
+      Decimal.cast(round(elem))
+    else
+      Decimal.cast(elem)
+    end
+  end
   defp decode({elem}) when is_number(elem), do: elem
   defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
   defp decode({date, time, tz}) when is_tuple(date) and is_list(tz), do: to_date({date, time, tz})
