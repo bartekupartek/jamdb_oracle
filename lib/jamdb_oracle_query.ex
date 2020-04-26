@@ -56,6 +56,10 @@ defmodule Jamdb.Oracle.Query do
       when length(rows) > 1 and length(returning) > 0,
       do: raise "Batch insert doesn't support returning values!"
 
+  def insert(_prefix, _table, _header, rows, on_conflict, {targets, _, _})
+      when is_list(targets) and length(rows) > 1,
+      do: raise "Upsert doesn't support batch insert!"
+
   def insert(prefix, table, header, rows, on_conflict, returning) do
     values =
       if header == [] do
@@ -64,11 +68,38 @@ defmodule Jamdb.Oracle.Query do
         [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ") VALUES " | insert_all([header], 1)]
       end
 
-    if length(rows) > 1 do
-      {:batch, length(header), ["INSERT INTO ", quote_table(prefix, table), values]}
-    else
-      ["INSERT ", on_conflict(quote_table(prefix, table), on_conflict), " INTO ", quote_table(prefix, table), values | returning(returning)]
+    table_name = quote_table(prefix, table)
+
+    case on_conflict do
+      [] ->
+        batch_insert(["INSERT INTO ", table_name, values], header, rows, returning(returning))
+      {:raise, _, []} ->
+        batch_insert(["INSERT INTO ", table_name, values], header, rows, returning(returning))
+      {:nothing, _, targets} ->
+        batch_insert(["INSERT ", ignore_conflict(table_name, targets), " INTO ", table_name, values], header, rows, returning(returning))
+      {targets, _, [conflict]} when is_list(targets) ->
+        [
+          "begin", ?\s,
+            ["INSERT INTO ", table_name, values | returning(returning)], ?;, ?\s,
+          "exception", ?\s,
+            "when dup_val_on_index then", ?\s,
+              "UPDATE ", table_name, ?\s,
+              "SET ", intersperse_map(targets, ?,, fn t -> [quote_name(t), " = :", Integer.to_string(position(header, t))] end), ?\s,
+              "WHERE ", quote_name(conflict), " = :", Integer.to_string(position(header, conflict)), ?;, ?\s,
+          "end;"
+        ]
     end
+  end
+
+  defp batch_insert(query, header, rows, _returning) when length(rows) > 1 do
+    {:batch, length(header), query}
+  end
+  defp batch_insert(query, _header, _rows, returning) do
+    query ++ returning
+  end
+
+  defp position(columns, column) do
+    Enum.find_index(columns, fn c -> c == column end) + 1
   end
 
   defp insert_all(rows, counter) do
@@ -88,17 +119,12 @@ defmodule Jamdb.Oracle.Query do
     end)
   end
 
-  defp on_conflict(_table, []),
-       do: []
-  defp on_conflict(_table, {:raise, _, []}),
-       do: []
-  defp on_conflict(table, {:nothing, _, targets}),
+  defp ignore_conflict(table, targets),
        do: ["/*+ IGNORE_ROW_ON_DUPKEY_INDEX(", table, ?,, ?\s, conflict_target(targets) |") */"]
   defp conflict_target([]),
        do: []
   defp conflict_target(targets),
        do: [?(, intersperse_map(targets, ?,, &quote_name/1), ?), ?\s]
-
 
   @doc false
   def update(prefix, table, fields, filters, returning) do
