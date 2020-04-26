@@ -52,11 +52,11 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
-  def insert(_prefix, _table, _header, rows, _on_conflict, returning)
+  def insert(_prefix, _table, _header, rows, on_conflict, returning)
       when length(rows) > 1 and length(returning) > 0,
       do: raise "Batch insert doesn't support returning values!"
 
-  def insert(prefix, table, header, rows, _on_conflict, returning) do
+  def insert(prefix, table, header, rows, on_conflict, returning) do
     values =
       if header == [] do
         [" VALUES " | intersperse_map(rows, ?,, fn _ -> "(DEFAULT)" end)]
@@ -67,7 +67,7 @@ defmodule Jamdb.Oracle.Query do
     if length(rows) > 1 do
       {:batch, length(header), ["INSERT INTO ", quote_table(prefix, table), values]}
     else
-      ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
+      ["INSERT ", on_conflict(quote_table(prefix, table), on_conflict), " INTO ", quote_table(prefix, table), values | returning(returning)]
     end
   end
 
@@ -87,6 +87,18 @@ defmodule Jamdb.Oracle.Query do
         {[?: | Integer.to_string(counter)], counter + 1}
     end)
   end
+
+  defp on_conflict(_table, []),
+       do: []
+  defp on_conflict(_table, {:raise, _, []}),
+       do: []
+  defp on_conflict(table, {:nothing, _, targets}),
+       do: ["/*+ IGNORE_ROW_ON_DUPKEY_INDEX(", table, ?,, ?\s, conflict_target(targets) |") */"]
+  defp conflict_target([]),
+       do: []
+  defp conflict_target(targets),
+       do: [?(, intersperse_map(targets, ?,, &quote_name/1), ?), ?\s]
+
 
   @doc false
   def update(prefix, table, fields, filters, returning) do
