@@ -445,6 +445,10 @@ defmodule Jamdb.Oracle.Query do
 
   defp expr({:count, _, []}, _sources, _query), do: "count(*)"
 
+  defp expr({:ilike, _, [col, bind]}, sources, query) do
+    [?(, "LOWER", ?(, expr(col, sources, query), ?), " LIKE LOWER (", expr(bind, sources, query), ?), ?)]
+  end
+
   defp expr({fun, _, args}, sources, query) when is_atom(fun) and is_list(args) do
     case handle_call(fun, length(args)) do
       {:binary_op, op} ->
