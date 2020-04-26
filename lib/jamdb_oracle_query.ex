@@ -287,7 +287,8 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp order_by_expr({dir, expr}, sources, query) do
-    str = expr(expr, sources, query)
+    str = order_by_expression(expr, sources, query)
+
     case dir do
       :asc  -> str
       :asc_nulls_last -> [str | " ASC NULLS LAST"]
@@ -296,6 +297,14 @@ defmodule Jamdb.Oracle.Query do
       :desc_nulls_last -> [str | " DESC NULLS LAST"]
       :desc_nulls_first -> [str | " DESC NULLS FIRST"]
     end
+  end
+
+  defp order_by_expression({:==, _, _} = expr, sources, query) do
+    [?(, "CASE WHEN ", expr(expr, sources, query), " THEN 1 ELSE 0 END", ?)]
+  end
+
+  defp order_by_expression(expr, sources, query) do
+    expr(expr, sources, query)
   end
 
   defp limit(%{limit: nil}, _sources), do: []
