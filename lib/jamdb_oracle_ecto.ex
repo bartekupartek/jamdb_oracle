@@ -202,7 +202,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   end
 
   defp err, do: {:error, false}
-
 end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
@@ -230,6 +229,11 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   def stream(conn, query, params, opts) do
     DBConnection.stream(conn, query!(query, ""), params, opts)
   end
+
+  # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
+  @impl true
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
+    do: [foreign_key: constraint]
 
   @impl true
   def query(conn, query, params, opts) do
@@ -268,5 +272,4 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
   defdelegate to_constraints(err), to: Jamdb.Oracle.Query
   defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
-
 end
