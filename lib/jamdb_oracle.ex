@@ -89,8 +89,8 @@ defmodule Jamdb.Oracle do
     %Jamdb.Oracle.Query{statement: statement} = query
     case query(s, {:batch, statement |> to_charlist, Enum.chunk_every(params, query_rows_count)}, []) do
       {:ok, result} -> {:ok, query, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err} -> {:error, error!(err, statement), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
   def handle_execute(query, params, opts, s) do
@@ -100,8 +100,8 @@ defmodule Jamdb.Oracle do
       {:ok, result} <- recv_execute(result, query) do
         {:ok, query, result, s}
     else
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err} -> {:error, error!(err, statement), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
 
@@ -121,7 +121,7 @@ defmodule Jamdb.Oracle do
   end
   def handle_prepare(query, _opts, s), do: {:ok, query, s}
 
-  defp recv_describe(statement, opts, _s) do
+  defp recv_describe(_statement, opts, _s) do
     case Keyword.get(opts, :maybe) do
       :decimal -> [Jamdb.Oracle.Extensions.Numeric]
       _ -> []
@@ -172,8 +172,8 @@ defmodule Jamdb.Oracle do
   defp handle_transaction(statement, _opts, s) do
     case query(s, statement |> to_charlist) do
       {:ok, result} -> {:ok, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err} -> {:error, error!(err, statement), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
 
@@ -191,8 +191,8 @@ defmodule Jamdb.Oracle do
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
       {:ok, result} -> 
         {:halt, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err} -> {:error, error!(err, statement), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
   def handle_fetch(_query, _cursor, _opts, %{cursors: cursors} = s) do
@@ -234,7 +234,7 @@ defmodule Jamdb.Oracle do
   def checkout(s) do
     case query(s, 'SESSION') do
       {:ok, _} -> {:ok, s}
-      {:error, err} ->  {:disconnect, error!(err), s}
+      {:error, err} ->  {:disconnect, error!(err, 'SESSION'), s}
     end
   end
 
@@ -242,17 +242,17 @@ defmodule Jamdb.Oracle do
   def ping(%{mode: :idle} = s) do
     case query(s, 'PING') do
       {:ok, _} -> {:ok, s}
-      {:error, err} -> {:disconnect, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err} -> {:disconnect, error!(err, 'PING'), s}
+      {:disconnect, err} -> {:disconnect, error!(err, 'PING'), s}
     end
   end
   def ping(%{mode: :transaction} = s) do
     {:ok, s}
   end
 
-  defp error!(msg) do
-    DBConnection.ConnectionError.exception("#{inspect msg}")
-  end
+  defp error!(msg, query \\ nil)
+  defp error!(msg, query) when is_binary(msg), do: Jamdb.Oracle.Error.exception(message: msg, query: query)
+  defp error!(msg, query), do: msg |> inspect |> error!(query)
 
   @doc """
   Returns the configured JSON library.
