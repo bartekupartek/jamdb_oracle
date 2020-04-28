@@ -28,6 +28,11 @@ defmodule Jamdb.Oracle.Error do
   # ORA-02291: integrity constraint (SYSTEM.BANK_TRANSACTIONS_PATIENT_ID_FKEY) violated - parent key not found
   defp build_details(%{oracle_code: "ORA-02291"}, message),
     do: %{code: :foreign_key_violation, constraint: parse_constraint(message)}
+
+  # ORA-00001: unique constraint (SYSTEM.DOCTORS__LOWER_EMAIL_INDEX) violated
+  defp build_details(%{oracle_code: "ORA-00001"}, message),
+    do: %{code: :unique_violation, constraint: parse_constraint(message)}
+
   defp build_details(_code, _message), do: %{}
 
   @error_code ~r/(?<error>ORA-.*)\:.*/
