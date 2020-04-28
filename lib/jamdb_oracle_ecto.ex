@@ -248,6 +248,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
 
   # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
   @impl true
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
+    do: [unique: constraint]
   def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
     do: [foreign_key: constraint]
 
