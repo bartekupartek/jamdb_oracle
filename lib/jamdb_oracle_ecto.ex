@@ -252,6 +252,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     do: [unique: constraint]
   def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
     do: [foreign_key: constraint]
+  def to_constraints(_),
+    do: []
 
   @impl true
   def query(conn, query, params, opts) do

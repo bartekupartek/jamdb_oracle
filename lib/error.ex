@@ -29,6 +29,10 @@ defmodule Jamdb.Oracle.Error do
   defp build_details(%{oracle_code: "ORA-02291"}, message),
     do: %{code: :foreign_key_violation, constraint: parse_constraint(message)}
 
+  # ORA-02292: integrity constraint (SYSTEM.PRESCRIPTION_ORDER_ITEMS_INVENTORY_ITEM_ID_FKEY) violated - child record found
+  defp build_details(%{oracle_code: "ORA-02292"}, message),
+    do: %{code: :foreign_key_violation, constraint: parse_constraint(message)}
+
   # ORA-00001: unique constraint (SYSTEM.DOCTORS__LOWER_EMAIL_INDEX) violated
   defp build_details(%{oracle_code: "ORA-00001"}, message),
     do: %{code: :unique_violation, constraint: parse_constraint(message)}
