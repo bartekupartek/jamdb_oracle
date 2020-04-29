@@ -88,6 +88,17 @@ defmodule Jamdb.Oracle.Query do
               "WHERE ", quote_name(conflict), " = :", Integer.to_string(position(header, conflict)), ?;, ?\s,
           "end;"
         ]
+      {query, _, targets} ->
+        [
+          "begin", ?\s,
+          ["INSERT INTO ", table_name, values | returning(returning)], ?;, ?\s,
+          "exception", ?\s,
+          "when dup_val_on_index then", ?\s,
+          "UPDATE ", table_name, ?\s,
+          "SET ", update_all(query, ""), ?\s,
+          "WHERE ", intersperse_map(targets, ?,, fn t -> [quote_name(t), " = :", Integer.to_string(position(header, t))] end), ?;, ?\s,
+          "end;"
+        ]
     end
   end
 
