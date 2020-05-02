@@ -57,33 +57,7 @@ defmodule Jamdb.Oracle do
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
   defp stmt({:batch, sql, params}, _), do: {:batch, sql, params}
-  defp stmt(sql, params), do: fix_insert(sql, params)
-
-  defp fix_insert(sql, params) do
-    if String.match?(IO.iodata_to_binary(sql), ~r/when dup_val_on_index then UPDATE medical_forms SET/i) do
-      new_params = Enum.drop(params, -3)
-
-      index = 0
-      position = 1
-      len = length(new_params)
-      last_ind = len - 1
-      {clob, rest} = List.pop_at(new_params, 0)
-      {last, rest2} = List.pop_at(rest, last_ind - 1)
-
-      new_params = [last] ++ rest2 ++ [clob]
-
-      new_sql = sql
-      |> IO.iodata_to_binary()
-      |> String.replace("(fields,", "(id,")
-      |> String.replace(",id)", ",fields)")
-      |> String.replace("name = :8, permission = :9, fields = :10", "name = :2, permission = :3, fields = :7")
-      |> to_charlist()
-
-      {new_sql, new_params}
-    else
-      {sql, params}
-    end
-  end
+  defp stmt(sql, params), do: {sql, params}
 
   @impl true
   def connect(opts) do
