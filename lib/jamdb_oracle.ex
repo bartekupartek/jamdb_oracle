@@ -59,7 +59,7 @@ defmodule Jamdb.Oracle do
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
   defp stmt({:batch, sql, params}, _), do: {:batch, sql, params}
   defp stmt(sql, params), do: {sql, params}
-  
+
   @impl true
   def connect(opts) do
     database = Keyword.fetch!(opts, :database) |> to_charlist
@@ -323,11 +323,11 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     if String.valid?(elem) do
       elem |> to_charlist
     else
-      elem |> Base.encode16
+      elem |> Base.encode16()
     end
   end
   defp encode(elem) when is_map(elem) or is_list(elem),
-       do: Jamdb.Oracle.json_library().encode!(elem) |> Base.encode16
+       do: Jamdb.Oracle.json_library().encode!(elem) |> to_charlist()
   defp encode(elem), do: elem
 
   defp expr(list) when is_list(list) do
