@@ -75,6 +75,15 @@ defmodule Jamdb.Oracle.Query do
         batch_insert(["INSERT INTO ", table_name, values], header, rows, returning(returning))
       {:raise, _, []} ->
         batch_insert(["INSERT INTO ", table_name, values], header, rows, returning(returning))
+      {:nothing, _, []} ->
+        [
+          "begin", ?\s,
+          ["INSERT INTO ", table_name, values], ?;, ?\s,
+          "exception", ?\s,
+          "when dup_val_on_index then", ?\s,
+            "NULL;", ?\s,
+          "end;"
+        ]
       {:nothing, _, targets} ->
         batch_insert(["INSERT ", ignore_conflict(table_name, targets), " INTO ", table_name, values], header, rows, returning(returning))
       {targets, _, [conflict]} when is_list(targets) ->
@@ -101,6 +110,7 @@ defmodule Jamdb.Oracle.Query do
         ]
     end
   end
+
 
   defp batch_insert(query, header, rows, _returning) when length(rows) > 1 do
     {:batch, length(header), query}
@@ -134,6 +144,8 @@ defmodule Jamdb.Oracle.Query do
        do: ["/*+ IGNORE_ROW_ON_DUPKEY_INDEX(", table, ?,, ?\s, conflict_target(targets) |") */"]
   defp conflict_target([]),
        do: []
+  defp conflict_target({:unsafe_fragment, fragment}),
+       do: [fragment, ?\s]
   defp conflict_target(targets),
        do: [?(, intersperse_map(targets, ?,, &quote_name/1), ?), ?\s]
 
