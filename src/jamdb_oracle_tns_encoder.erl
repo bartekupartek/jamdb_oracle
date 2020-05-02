@@ -244,6 +244,14 @@ encode_record(close, #oraclient{seq=Tseq}) ->
     ?TTI_LOGOFF, Tseq
     >>.
 
+varchar_setopts(size, []) -> 4000;
+varchar_setopts(size, [Head|_]) ->
+  case Head of
+    123 -> 33554432; % { clob
+    91 -> 33554432;  % [ blob
+    _ -> 4000
+  end.
+
 setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0];
 setopts(size, Data) when length(Data) > 4000 -> 33554432;  %clob
 setopts(size, _Data) -> 4000.
@@ -280,7 +288,7 @@ encode_token(rxd, [], Acc) -> Acc;
 encode_token(rxd, [Data|Rest], Acc) ->
     encode_token(rxd, Rest, <<Acc/binary, (encode_token(Data, <<?TTI_RXD>>))/binary>>);
 encode_token(oac, Data, #format{charset=Charset}) when is_list(Data) ->
-    encode_token(oac, ?TNS_TYPE_VARCHAR, setopts(size, Data), 16, Charset, 0);
+    encode_token(oac, ?TNS_TYPE_VARCHAR, varchar_setopts(size, Data), 16, Charset, 0);
 encode_token(oac, Data, _) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
 encode_token(oac, Data, _) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
 encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}, _) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
