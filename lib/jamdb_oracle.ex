@@ -326,6 +326,8 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
       elem |> Base.encode16()
     end
   end
+  defp encode(%Postgrex.INET{address: address, netmask: netmask}),
+    do: Enum.join(address |> Tuple.to_list, ".") <> "/#{netmask || 32}"
   defp encode(elem) when is_map(elem) or is_list(elem),
        do: Jamdb.Oracle.json_library().encode!(elem) |> to_charlist()
   defp encode(elem), do: elem
