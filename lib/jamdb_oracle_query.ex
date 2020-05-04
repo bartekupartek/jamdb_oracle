@@ -935,7 +935,7 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:naive_datetime_usec), do: "timestamp"
   defp ecto_to_db(:utc_datetime),        do: "timestamp"
   defp ecto_to_db(:utc_datetime_usec),   do: "timestamp"
-  defp ecto_to_db(:inet),                do: "raw(16)"
+  defp ecto_to_db(:inet),                do: "varchar2(255)"
   defp ecto_to_db(other),                do: Atom.to_string(other)
 
   defp single_quote(value), do: [?', escape_string(value), ?']
