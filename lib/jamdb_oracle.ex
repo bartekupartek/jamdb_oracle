@@ -333,8 +333,24 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(true), do: "1"
   defp encode(false), do: "0"
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
-  defp encode(%DateTime{} = datetime), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-  defp encode(%NaiveDateTime{} = naive), do: NaiveDateTime.to_erl(naive)
+  defp encode(%DateTime{} = datetime), do: encode(DateTime.to_naive(datetime))
+  defp encode(%NaiveDateTime{microsecond: {microsecond, 6}} = naive) do
+    {{year, month, day}, {hour, minute, second}} = NaiveDateTime.to_erl(naive)
+    {{year, month, day}, {hour, minute, second, microsecond}}
+  end
+  defp encode(%NaiveDateTime{microsecond: {microsecond, p}} = naive) when p > 6 do
+    microsecond = round(microsecond / round(:math.pow(10, p)) * round(:math.pow(10, 6)))
+    {{year, month, day}, {hour, minute, second}} = NaiveDateTime.to_erl(naive)
+    {{year, month, day}, {hour, minute, second, microsecond}}
+  end
+  defp encode(%NaiveDateTime{microsecond: {microsecond, p}} = naive) when p > 0 do
+    microsecond = microsecond * round(:math.pow(10, 6 - p))
+    {{year, month, day}, {hour, minute, second}} = NaiveDateTime.to_erl(naive)
+    {{year, month, day}, {hour, minute, second, microsecond}}
+  end
+  defp encode(%NaiveDateTime{} = naive) do
+    NaiveDateTime.to_erl(naive)
+  end
   defp encode(%Ecto.Query.Tagged{value: elem}), do: elem
   defp encode(elem) when is_binary(elem) do
     if String.valid?(elem) do
