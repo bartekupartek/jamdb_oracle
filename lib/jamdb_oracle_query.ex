@@ -52,11 +52,11 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
-  def insert(_prefix, _table, _header, rows, on_conflict, returning)
+  def insert(_prefix, _table, _header, rows, _on_conflict, returning)
       when length(rows) > 1 and length(returning) > 0,
       do: raise "Batch insert doesn't support returning values!"
 
-  def insert(_prefix, _table, _header, rows, on_conflict, {targets, _, _})
+  def insert(_prefix, _table, _header, rows, _on_conflict, {targets, _, _})
       when is_list(targets) and length(rows) > 1,
       do: raise "Upsert doesn't support batch insert!"
 
