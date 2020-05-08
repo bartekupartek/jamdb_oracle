@@ -568,7 +568,7 @@ decode_binary(<<I,Rest/binary>> = Data) ->
 decode_date(<<Century,Year,Mon,Day,Hour,Min,Sec>>) ->
     {{(Century - 100) * 100 + (Year - 100),(Mon),(Day)},
      {(Hour - 1),(Min - 1),(Sec - 1)}};
-decode_date(<<Data:7/binary,Ms:4/integer-unit:8>> = Bin) ->
+decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
     {Date,{Hour,Min,Sec}} = decode_date(Data),
     {Date,{Hour,Min,Sec,Ms}};
 decode_date(<<Data:11/binary,H,M>>) ->
