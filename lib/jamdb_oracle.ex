@@ -330,8 +330,8 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode([elem | next1], [_type | next2]), do: [ elem | encode(next1, next2)]
 
   defp encode(nil), do: :null
-  defp encode(true), do: "1"
-  defp encode(false), do: "0"
+  defp encode(true), do: 1
+  defp encode(false), do: 0
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
   defp encode(%DateTime{} = datetime), do: encode(DateTime.to_naive(datetime))
   defp encode(%NaiveDateTime{microsecond: {microsecond, 6}} = naive) do
@@ -356,7 +356,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     if String.valid?(elem) do
       elem |> to_charlist
     else
-      elem |> Base.encode16()
+      elem |> Base.encode16() |> to_charlist
     end
   end
   defp encode(%Postgrex.INET{address: address, netmask: netmask}),
@@ -383,11 +383,14 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
         end) |> Enum.join
     end
   end
+  defp to_naive({date, {hour, min, sec, ms}}) when is_integer(sec) and is_integer(ms),
+       do: NaiveDateTime.from_erl!({date, {hour, min, sec}}, {round(ms / 1000), 6})
 
   defp to_naive({date, {hour, min, sec}}) when is_integer(sec),
     do: NaiveDateTime.from_erl!({date, {hour, min, sec}})
+
   defp to_naive({date, {hour, min, sec}}),
-    do: NaiveDateTime.from_erl!({date, {hour, min, trunc(sec)}}, parse_sec(sec))
+       do: NaiveDateTime.from_erl!({date, {hour, min, trunc(sec)}}, parse_sec(sec))
 
   defp to_utc({date, time}),
     do: DateTime.from_naive!(to_naive({date, time}), "Etc/UTC")
