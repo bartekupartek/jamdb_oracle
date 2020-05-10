@@ -102,18 +102,10 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%{batch: true, query_rows_count: query_rows_count} = query, params, _opts, s) do
-    %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:batch, statement |> to_charlist, Enum.chunk_every(params, query_rows_count)}, []) do
-      {:ok, result} -> {:ok, query, result, s}
-      {:error, err} -> {:error, error!(err, statement), s}
-      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
-    end
-  end
   def handle_execute(query, params, opts, s) do
-    %Jamdb.Oracle.Query{statement: statement} = query
+    %Jamdb.Oracle.Query{query_str: statement} = query
     with returning <- Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end),
-      {:ok, result} <- query(s, statement |> to_charlist, Enum.concat(params, returning)),
+      {:ok, result} <- query(s, statement, Enum.concat(params, returning)),
       {:ok, result} <- recv_execute(result, query) do
         {:ok, query, result, s}
     else
@@ -130,7 +122,7 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_prepare(%Jamdb.Oracle.Query{statement: statement}=query, opts, s) when is_binary(statement) do
+  def handle_prepare(%Jamdb.Oracle.Query{query_str: statement}=query, opts, s) when is_binary(statement) do
     result_types = recv_describe(statement, opts, s)
     query = %Jamdb.Oracle.Query{query | result_types: result_types}
 
@@ -201,8 +193,8 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def handle_fetch(query, %{params: params}, _opts, %{cursors: nil} = s) do
-    %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:fetch, statement |> to_charlist, params}) do
+    %Jamdb.Oracle.Query{query_str: statement} = query
+    case query(s, statement, params) do
       {:cont, {_, cursor, row_format, rows}} ->
         cursors = %{cursor: cursor, row_format: row_format, last_row: List.last(rows)}
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
@@ -349,8 +341,8 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
       elem |> Base.encode16() |> to_charlist
     end
   end
-  defp encode(%Postgrex.INET{address: address, netmask: netmask}),
-    do: Enum.join(address |> Tuple.to_list, ".") <> "/#{netmask || 32}" |> to_charlist
+#  defp encode(%Postgrex.INET{address: address, netmask: netmask}),
+#    do: Enum.join(address |> Tuple.to_list, ".") <> "/#{netmask || 32}" |> to_charlist
   defp encode(elem) when is_map(elem) or is_list(elem),
        do: Jamdb.Oracle.json_library().encode!(elem) |> to_charlist()
   defp encode(elem), do: elem

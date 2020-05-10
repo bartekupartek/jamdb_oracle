@@ -160,6 +160,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def dumpers(_, type),           do: [type]
 
   @impl true
+  def loaders({:array, :map}, type), do: [&json_decode/1, type]
   def loaders({:array, _}, type), do: [&array_decode/1, type]
   def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
   def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
@@ -214,13 +215,12 @@ end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @moduledoc false
-  require Logger
 
   @behaviour Ecto.Adapters.SQL.Connection
 
   @impl true
   def child_spec(opts) do
-    DBConnection.child_spec(Jamdb.Oracle, opts)
+    DBConnection.child_spec(OraLixir, opts)
   end
 
   @impl true
@@ -238,37 +238,18 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     DBConnection.stream(conn, query!(query, ""), params, opts)
   end
 
-  # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
-  @impl true
-  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
-    do: [unique: constraint]
-  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
-    do: [foreign_key: constraint]
-  def to_constraints(_),
-    do: []
-
   @impl true
   def query(conn, query, params, opts) do
-    q = query!(query, "")
-    Logger.info(q.statement) # Always print executed SQL
-
-    case DBConnection.prepare_execute(conn, q, params, opts) do
-      {:ok, _, result}  -> {:ok, result}
-      {:error, err} -> {:error, err}
+    case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
+      {:ok, _, result} -> {:ok, result}
+      {:error, err} -> err
     end
   end
 
   defp query!(sql, name) when is_binary(sql) or is_list(sql) do
-    %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
+    %Jamdb.Oracle.Query{query_str: IO.iodata_to_binary(sql), name: name}
   end
-  defp query!({:batch, rows_count, sql}, name) do
-    %Jamdb.Oracle.Query{
-      statement: IO.iodata_to_binary(sql),
-      name: name,
-      batch: true,
-      query_rows_count: rows_count
-    }
-  end
+
   defp query!(%{} = query, _name) do
     query
   end
@@ -280,8 +261,91 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
   defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
   defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
-  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
-  defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
-  defdelegate to_constraints(err), to: Jamdb.Oracle.Query
-  defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
+
+  @impl true
+  def to_constraints(_err), do: []
+
+  @impl true
+  def execute_ddl(err), do: error!(err)
+
+  @impl true
+  def ddl_logs(err), do: error!(err)
+
+  defp error!(msg) do
+    raise DBConnection.ConnectionError, "#{inspect(msg)}"
+  end
 end
+
+#defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
+#  @moduledoc false
+#  require Logger
+#
+#  @behaviour Ecto.Adapters.SQL.Connection
+#
+#  @impl true
+#  def child_spec(opts) do
+#    DBConnection.child_spec(Jamdb.Oracle, opts)
+#  end
+#
+#  @impl true
+#  def execute(conn, query, params, opts) do
+#    DBConnection.execute(conn, query!(query, ""), params, opts)
+#  end
+#
+#  @impl true
+#  def prepare_execute(conn, name, query, params, opts) do
+#    DBConnection.prepare_execute(conn, query!(query, name), params, opts)
+#  end
+#
+#  @impl true
+#  def stream(conn, query, params, opts) do
+#    DBConnection.stream(conn, query!(query, ""), params, opts)
+#  end
+#
+#  # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
+#  @impl true
+#  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
+#    do: [unique: constraint]
+#  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
+#    do: [foreign_key: constraint]
+#  def to_constraints(_),
+#    do: []
+#
+#  @impl true
+#  def query(conn, query, params, opts) do
+#    q = query!(query, "")
+#    Logger.info(q.statement) # Always print executed SQL
+#
+#    case DBConnection.prepare_execute(conn, q, params, opts) do
+#      {:ok, _, result}  -> {:ok, result}
+#      {:error, err} -> {:error, err}
+#    end
+#  end
+#
+#  defp query!(sql, name) when is_binary(sql) or is_list(sql) do
+#    %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
+#  end
+#  defp query!({:batch, rows_count, sql}, name) do
+#    %Jamdb.Oracle.Query{
+#      statement: IO.iodata_to_binary(sql),
+#      name: name,
+#      batch: true,
+#      query_rows_count: rows_count
+#    }
+#  end
+#  defp query!(%{} = query, _name) do
+#    query
+#  end
+#
+#  defdelegate all(query), to: Jamdb.Oracle.Query
+#  defdelegate update_all(query), to: Jamdb.Oracle.Query
+#  defdelegate delete_all(query), to: Jamdb.Oracle.Query
+#  defdelegate insert(prefix, table, header, rows, on_conflict, returning), to: Jamdb.Oracle.Query
+#  defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
+#  defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
+#  defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
+#  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
+#  defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
+#  defdelegate to_constraints(err), to: Jamdb.Oracle.Query
+#  defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
+#end

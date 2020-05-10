@@ -1,12 +1,31 @@
 defmodule Jamdb.Oracle.Query do
   @moduledoc """
-  Adapter module for Oracle. `DBConnection.Query` protocol implementation.
+  Query struct returned from a successfully prepared query.
 
-  See `DBConnection.prepare_execute/4`.
+  Its public fields are:
 
+    * `:name` - The name of the prepared statement;
+    * `:query_str` - The sql query string;
+    * `:num_cols` - The number of columns returned by the query;
+    * `:statement` - The prepared statement
+    * `:info` - Meta information about the statement
+
+  ## Named and Unnamed Queries (TBD)
+
+  Named queries are identified by the non-empty value in `:name` field
+  and are meant to be re-used.
+  Unnamed queries, with `:name` equal to `""`, are automatically closed
+  after being executed.
   """
 
-  defstruct [:statement, :name, :batch, :query_rows_count, :result_types]
+  defstruct [
+    :name,
+    :query_str,
+    :statement,
+    :numCols,
+    :info,
+    :result_types
+  ]
 
   alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
 
@@ -48,7 +67,7 @@ defmodule Jamdb.Oracle.Query do
     {from, name} = get_source(query, sources, 0, from)
 
     where = where(%{query | wheres: query.wheres}, sources)
-    
+
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
@@ -81,7 +100,7 @@ defmodule Jamdb.Oracle.Query do
           ["INSERT INTO ", table_name, values], ?;, ?\s,
           "exception", ?\s,
           "when dup_val_on_index then", ?\s,
-            "NULL;", ?\s,
+          "NULL;", ?\s,
           "end;"
         ]
       {:nothing, _, targets} ->
@@ -89,12 +108,12 @@ defmodule Jamdb.Oracle.Query do
       {targets, _, [conflict]} when is_list(targets) ->
         [
           "begin", ?\s,
-            ["INSERT INTO ", table_name, values | returning(returning)], ?;, ?\s,
+          ["INSERT INTO ", table_name, values | returning(returning)], ?;, ?\s,
           "exception", ?\s,
-            "when dup_val_on_index then", ?\s,
-              "UPDATE ", table_name, ?\s,
-              "SET ", intersperse_map(targets, ?,, fn t -> [quote_name(t), " = :", Integer.to_string(position(header, t))] end), ?\s,
-              "WHERE ", quote_name(conflict), " = :", Integer.to_string(position(header, conflict)), ?;, ?\s,
+          "when dup_val_on_index then", ?\s,
+          "UPDATE ", table_name, ?\s,
+          "SET ", intersperse_map(targets, ?,, fn t -> [quote_name(t), " = :", Integer.to_string(position(header, t))] end), ?\s,
+          "WHERE ", quote_name(conflict), " = :", Integer.to_string(position(header, conflict)), ?;, ?\s,
           "end;"
         ]
       {query, _, targets} ->
@@ -164,7 +183,7 @@ defmodule Jamdb.Oracle.Query do
     end)
 
     ["UPDATE ", quote_table(prefix, table), " SET ",
-     fields, " WHERE ", filters | returning(returning)]
+      fields, " WHERE ", filters | returning(returning)]
   end
 
   @doc false
@@ -195,8 +214,8 @@ defmodule Jamdb.Oracle.Query do
 
   binary_ops =
     [==: " = ", !=: " != ", <=: " <= ", >=: " >= ", <: " < ", >: " > ",
-     +: " + ", -: " - ", *: " * ", /: " / ",
-     and: " AND ", or: " OR ", like: " LIKE "]
+      +: " + ", -: " - ", *: " * ", /: " / ",
+      and: " AND ", or: " OR ", like: " LIKE "]
 
   @binary_ops Keyword.keys(binary_ops)
 
@@ -213,7 +232,7 @@ defmodule Jamdb.Oracle.Query do
   @reserved_keywords [:comment, :size, :number, :current]
 
   defp select_fields([], _sources, _query),
-    do: "NULL"
+       do: "NULL"
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
       # @reserved_keywords are reserved in Oracle, so we need to quote it
@@ -244,9 +263,9 @@ defmodule Jamdb.Oracle.Query do
 
   defp update_fields(%{updates: updates} = query, sources) do
     for(%{expr: expr} <- updates,
-        {op, kw} <- expr,
-        {key, value} <- kw,
-        do: update_op(op, key, value, sources, query)) |> Enum.intersperse(", ")
+      {op, kw} <- expr,
+      {key, value} <- kw,
+      do: update_op(op, key, value, sources, query)) |> Enum.intersperse(", ")
   end
 
   defp update_op(:set, key, value, sources, query) do
@@ -255,7 +274,7 @@ defmodule Jamdb.Oracle.Query do
 
   defp update_op(:inc, key, value, sources, query) do
     [quote_name(key), " = ", quote_qualified_name(key, sources, 0), " + " |
-     expr(value, sources, query)]
+                                                                    expr(value, sources, query)]
   end
 
   defp update_op(command, _key, _value, _sources, query) do
@@ -363,7 +382,7 @@ defmodule Jamdb.Oracle.Query do
   defp limit(%{limit: %QueryExpr{expr: expr}} = query, sources) do
     [" FETCH NEXT ", expr(expr, sources, query), " ROWS ONLY"]
   end
-  
+
   defp offset(%{offset: nil}, _sources), do: []
   defp offset(%{offset: %QueryExpr{expr: expr}} = query, sources) do
     [" OFFSET ", expr(expr, sources, query), " ROWS"]
@@ -539,7 +558,7 @@ defmodule Jamdb.Oracle.Query do
   defp expr(false, _sources, _query), do: "0"
 
   defp expr(literal, _sources, _query) when is_binary(literal) or is_list(literal) do
-     ["'", escape_string(literal), "'"]
+    ["'", escape_string(literal), "'"]
   end
 
   defp expr(literal, _sources, _query) when is_integer(literal) do
@@ -551,8 +570,8 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp interval(datetime, literal, count, interval, sources, query) do
-    [?(, expr(datetime, sources, query), literal, " INTERVAL '", 
-         expr(count, sources, query), "' ", interval, ?)]
+    [?(, expr(datetime, sources, query), literal, " INTERVAL '",
+      expr(count, sources, query), "' ", interval, ?)]
   end
 
   defp op_to_binary({op, _, [_, _]} = expr, sources, query) when op in @binary_ops do
@@ -564,20 +583,20 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp returning(%{select: nil}, _sources),
-    do: []
+       do: []
   defp returning(%{select: %{fields: fields}} = query, sources) do
     [{:&, _, [_idx, returning, _counter]}] = fields
     [" RETURN ", select_fields(fields, sources, query),
-     " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
+      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
   end
-  
+
   defp returning([]),
-    do: []
+       do: []
   defp returning(fields) do
     returning = fields |> Enum.filter(& is_tuple(&1) == false)
     [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
-     " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
-  end   
+      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
+  end
 
   defp create_names(%{sources: sources}) do
     create_names(sources, 0, tuple_size(sources)) |> List.to_tuple()
@@ -619,15 +638,15 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl({command, %Table{} = table, columns}) when command in [:create, :create_if_not_exists] do
     table_name = quote_table(table.prefix, table.name)
     query = [if_do(command == :create_if_not_exists, :begin),
-             "CREATE TABLE ",
-             table_name, ?\s, ?(,
-             column_definitions(table, columns), pk_definition(columns, ", "), ?),
-             options_expr(table.options),
-             if_do(command == :create_if_not_exists, :end)]
-    
+      "CREATE TABLE ",
+      table_name, ?\s, ?(,
+      column_definitions(table, columns), pk_definition(columns, ", "), ?),
+      options_expr(table.options),
+      if_do(command == :create_if_not_exists, :end)]
+
     [query] ++
-      comments_on("TABLE", table_name, table.comment) ++
-      comments_for_columns(table_name, columns)
+    comments_on("TABLE", table_name, table.comment) ++
+    comments_for_columns(table_name, columns)
   end
 
   def execute_ddl({command, %Table{} = table}) when command in [:drop, :drop_if_exists] do
@@ -639,11 +658,11 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl({:alter, %Table{} = table, changes}) do
     table_name = quote_table(table.prefix, table.name)
     query = ["ALTER TABLE ", table_name, ?\s,
-             column_changes(table, changes), pk_definition(changes, ", ADD ")]
+      column_changes(table, changes), pk_definition(changes, ", ADD ")]
 
     [query] ++
-      comments_on("TABLE", table_name, table.comment) ++
-      comments_for_columns(table_name, changes)
+    comments_on("TABLE", table_name, table.comment) ++
+    comments_for_columns(table_name, changes)
   end
 
   def execute_ddl({command, %Index{} = index}) when command in [:create, :create_if_not_exists] do
@@ -689,7 +708,7 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl(string) when is_binary(string), do: [string]
 
   def execute_ddl(keyword) when is_list(keyword),
-    do: error!(nil, "keyword lists in execute are not supported")
+      do: error!(nil, "keyword lists in execute are not supported")
 
   defp pk_definition(columns, prefix) do
     pks =
@@ -723,7 +742,7 @@ defmodule Jamdb.Oracle.Query do
 
   defp column_definition(table, {:add, name, %Reference{} = ref, opts}) do
     [quote_name(name), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts), reference_expr(ref, table, name)]
+      column_options(ref.type, opts), reference_expr(ref, table, name)]
   end
 
   defp column_definition(_table, {:add, name, type, opts}) do
@@ -747,7 +766,7 @@ defmodule Jamdb.Oracle.Query do
 
   defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
     [quote_name(name), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts), reference_expr(ref, table, name)]
+      column_options(ref.type, opts), reference_expr(ref, table, name)]
   end
 
   defp column_change(_table, {:add, name, type, opts}) do
@@ -756,12 +775,12 @@ defmodule Jamdb.Oracle.Query do
 
   defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
     [drop_constraint_expr(opts[:from], table, name), "MODIFY ", quote_name(name), " ", column_type(ref.type, opts),
-     constraint_expr(ref, table, name), modify_null(name, opts), modify_default(name, ref.type, opts)]
+      constraint_expr(ref, table, name), modify_null(name, opts), modify_default(name, ref.type, opts)]
   end
 
   defp column_change(table, {:modify, name, type, opts}) do
     [drop_constraint_expr(opts[:from], table, name), "MODIFY ", quote_name(name), " ",
-     column_type(type, opts), modify_null(name, opts), modify_default(name, type, opts)]
+      column_type(type, opts), modify_null(name, opts), modify_default(name, type, opts)]
   end
 
   defp column_change(_table, {:remove, name}), do: [quote_name(name)]
@@ -802,27 +821,27 @@ defmodule Jamdb.Oracle.Query do
   defp null_expr(_), do: []
 
   defp default_expr(:bigserial, :error, true),
-    do: " GENERATED BY DEFAULT ON NULL AS IDENTITY"
+       do: " GENERATED BY DEFAULT ON NULL AS IDENTITY"
   defp default_expr(_type, default, _primary_key),
-    do: default_expr(default)
+       do: default_expr(default)
   defp default_expr({:ok, nil}),
-    do: " DEFAULT NULL"
+       do: " DEFAULT NULL"
   # defp default_expr({:ok, []}),
-    # do: " DEFAULT '[]'"
+  # do: " DEFAULT '[]'"
   defp default_expr({:ok, literal}) when is_binary(literal),
-    do: [" DEFAULT '", escape_string(literal), ?']
+       do: [" DEFAULT '", escape_string(literal), ?']
   defp default_expr({:ok, true}),
-    do: [" DEFAULT 1"]
+       do: [" DEFAULT 1"]
   defp default_expr({:ok, false}),
-    do: [" DEFAULT 0"]
+       do: [" DEFAULT 0"]
   defp default_expr({:ok, literal}) when is_number(literal) or is_boolean(literal),
-    do: [" DEFAULT ", to_string(literal)]
+       do: [" DEFAULT ", to_string(literal)]
   defp default_expr({:ok, {:fragment, expr}}),
-    do: [" DEFAULT ", expr]
+       do: [" DEFAULT ", expr]
   defp default_expr({:ok, value}) when is_map(value) or is_list(value),
-    do: " DEFAULT '#{Jamdb.Oracle.json_library().encode!(value)}'"
+       do: " DEFAULT '#{Jamdb.Oracle.json_library().encode!(value)}'"
   defp default_expr(:error),
-    do: []
+       do: []
 
   defp index_columns(%Index{where: nil, columns: columns}), do: [?(, intersperse_map(columns, ", ", &index_expr/1), ?)]
 
@@ -841,22 +860,22 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp index_expr(literal) when is_binary(literal),
-    do: literal
+       do: literal
   defp index_expr(literal),
-    do: quote_name(literal)
+       do: quote_name(literal)
 
   defp options_expr(nil),
-    do: []
+       do: []
   defp options_expr(keyword) when is_list(keyword),
-    do: error!(nil, "keyword lists in :options are not supported")
+       do: error!(nil, "keyword lists in :options are not supported")
   defp options_expr(options),
-    do: [?\s, options]
+       do: [?\s, options]
 
   defp column_type({:array, type}, opts),
-    do: [column_type(type, opts)]
+       do: [column_type(type, opts)]
 
   defp column_type(type, _opts) when type in ~w(utc_datetime naive_datetime)a,
-    do: [ecto_to_db(type), "(0)"]
+       do: [ecto_to_db(type), "(0)"]
 
   defp column_type(type, opts) when type in ~w(utc_datetime_usec naive_datetime_usec)a do
     precision = Keyword.get(opts, :precision)
@@ -885,30 +904,30 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp reference_expr(%Reference{} = ref, table, name),
-    do: [" CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
+       do: [" CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
          quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
          reference_on_delete(ref.on_delete)]
 
   defp constraint_expr(%Reference{} = ref, table, name),
-    do: [", ADD CONSTRAINT ", reference_name(ref, table, name), ?\s,
+       do: [", ADD CONSTRAINT ", reference_name(ref, table, name), ?\s,
          "FOREIGN KEY (", quote_name(name), ") REFERENCES ",
          quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
          reference_on_delete(ref.on_delete)]
 
   defp drop_constraint_expr(%Reference{} = ref, table, name),
-    do: ["DROP CONSTRAINT ", reference_name(ref, table, name), ", "]
+       do: ["DROP CONSTRAINT ", reference_name(ref, table, name), ", "]
   defp drop_constraint_expr(_, _, _),
-    do: []
+       do: []
 
   defp reference_name(%Reference{name: nil}, table, column),
-    do: quote_name("#{table.name}_#{column}_fkey")
+       do: quote_name("#{table.name}_#{column}_fkey")
   defp reference_name(%Reference{name: name}, _table, _column),
-    do: quote_name(name)
+       do: quote_name(name)
 
-  defp constraint_expr(%Constraint{check: check}) when is_binary(check), 
-    do: [" CHECK ", ?(, check, ?)]
+  defp constraint_expr(%Constraint{check: check}) when is_binary(check),
+       do: [" CHECK ", ?(, check, ?)]
   defp constraint_expr(_),
-    do: []
+       do: []
 
   defp reference_on_delete(:nilify_all), do: " ON DELETE SET NULL"
   defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"
@@ -976,25 +995,25 @@ defmodule Jamdb.Oracle.Query do
   defp quote_table(prefix, name), do: [quote_table(prefix), ?., quote_table(name)]
 
   defp quote_table(name) when is_atom(name),
-    do: quote_table(Atom.to_string(name))
+       do: quote_table(Atom.to_string(name))
   defp quote_table(name) do
     if String.contains?(name, "\"") do
       error!(nil, "bad table name #{inspect name}")
     end
-     [name] # identifiers are not case sensitive
+    [name] # identifiers are not case sensitive
   end
 
   defp intersperse_map(list, separator, mapper, acc \\ [])
   defp intersperse_map([], _separator, _mapper, acc),
-    do: acc
+       do: acc
   defp intersperse_map([elem], _separator, mapper, acc),
-    do: [acc | mapper.(elem)]
+       do: [acc | mapper.(elem)]
   defp intersperse_map([elem | rest], separator, mapper, acc),
-    do: intersperse_map(rest, separator, mapper, [acc, mapper.(elem), separator])
+       do: intersperse_map(rest, separator, mapper, [acc, mapper.(elem), separator])
 
   defp intersperse_reduce(list, separator, user_acc, reducer, acc \\ [])
   defp intersperse_reduce([], _separator, user_acc, _reducer, acc),
-    do: {acc, user_acc}
+       do: {acc, user_acc}
   defp intersperse_reduce([elem], _separator, user_acc, reducer, acc) do
     {elem, user_acc} = reducer.(elem, user_acc)
     {[acc | elem], user_acc}
@@ -1017,11 +1036,94 @@ defmodule Jamdb.Oracle.Query do
   defp error!(query, msg) do
     raise Ecto.QueryError, query: query, message: msg
   end
-  
+end
+
+defimpl DBConnection.Query, for: Jamdb.Oracle.Query  do
+  def parse(query, _opts), do: query
+  def describe(query, _opts), do: query
+
+  def decode(_query, %{rows: []} = result, _opts), do: result
+  def decode(_query, %{rows: nil} = result, _opts), do: result
+
+  def decode(_query, %{columns: columns, rows: rows} = result, _opts) when is_list(rows) do
+    mapped_rows =
+      Enum.map(rows, fn row ->
+        columns
+        |> Enum.zip(row)
+        |> Enum.map(fn {column, value} -> decode(column, value) end)
+      end)
+
+    %{result | rows: mapped_rows}
+  end
+
+  def decode(_query, result, _opts), do: result
+
+  def decode(_column, :null) do
+    nil
+  end
+
+  def decode(
+        %{typeInfo: %{oracleTypeNum: :DPI_ORACLE_TYPE_TIMESTAMP, fsPrecision: precision}},
+        %{
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          fsecond: microsecond
+        } = t
+      ) do
+    {:ok, time} =
+      NaiveDateTime.new(
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        {ms_precised(microsecond, 9), precision}
+      )
+
+    time
+  end
+
+  def decode(%{typeInfo: %{oracleTypeNum: :DPI_ORACLE_TYPE_NUMBER, scale: 0}}, value) do
+    round(value)
+  end
+
+  def decode(_column, value) do
+    value
+  end
+
+  defp ms_precised(_value, p) when p <= 0, do: 0
+  defp ms_precised(value, 6), do: value
+  defp ms_precised(value, p) when p < 6, do: value * round(:math.pow(10, 6 - p))
+
+  defp ms_precised(value, p) when p > 6 do
+    round(value / round(:math.pow(10, p)) * round(:math.pow(10, 6)))
+  end
+
+  def encode(_, [], _), do: []
+  def encode(_, params, _) do
+    Enum.map(params, fn elem -> encode(elem) end)
+  end
+
+  defp encode(true), do: 1
+  defp encode(false), do: 0
+  defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
+  defp encode(%Ecto.Query.Tagged{value: elem}), do: elem
+#  defp encode(%Postgrex.INET{address: address, netmask: netmask}),
+#       do: Enum.join(address |> Tuple.to_list, ".") <> "/#{netmask || 32}" |> to_charlist
+  defp encode(%s{} = elem) when s in [NaiveDateTime, DateTime],
+       do: elem
+  defp encode(elem) when is_map(elem) or is_list(elem),
+       do: Jamdb.Oracle.json_library().encode!(elem)
+  defp encode(elem), do: elem
 end
 
 defimpl String.Chars, for: Jamdb.Oracle.Query do
-  def to_string(%Jamdb.Oracle.Query{statement: statement}) do
-    IO.iodata_to_binary(statement)
+  def to_string(%Jamdb.Oracle.Query{query_str: query_str}) do
+    query_str
   end
 end
