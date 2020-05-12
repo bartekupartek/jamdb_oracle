@@ -271,7 +271,7 @@ defmodule Jamdb.Oracle.Query do
         end
 
         {join, name} = get_source(query, sources, ix, source)
-        [join_qual(qual), join, " ", name | join_on(qual, expr, sources, query)]
+        [join_qual(qual), join_parentheses(join), " ", name | join_on(qual, expr, sources, query)]
     end)]
   end
 
@@ -287,6 +287,10 @@ defmodule Jamdb.Oracle.Query do
   defp join_qual(:right), do: "RIGHT OUTER JOIN "
   defp join_qual(:full),  do: "FULL OUTER JOIN "
   defp join_qual(:cross), do: "CROSS JOIN "
+
+  # delete extra ()
+  defp join_parentheses([40, [40, expr, 41], 41]), do: [40, expr, 41]
+  defp join_parentheses(expr), do: expr
 
   defp where(%{wheres: wheres} = query, sources) do
     boolean(" WHERE ", wheres, sources, query)
@@ -404,7 +408,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp paren_expr(expr, sources, query) do
-    [expr(expr, sources, query)]
+    [?(, expr(expr, sources, query), ?)]
   end
 
   defp expr({:^, [], [ix]}, _sources, _query) do
