@@ -839,7 +839,7 @@ defmodule Jamdb.Oracle.Query do
   defp default_expr({:ok, {:fragment, expr}}),
        do: [" DEFAULT ", expr]
   defp default_expr({:ok, value}) when is_map(value) or is_list(value),
-       do: " DEFAULT '#{Jamdb.Oracle.json_library().encode!(value)}'"
+       do: " DEFAULT '#{Jason.encode!(value)}'"
   defp default_expr(:error),
        do: []
 
@@ -1118,7 +1118,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query  do
   defp encode(%s{} = elem) when s in [NaiveDateTime, DateTime],
        do: elem
   defp encode(elem) when is_map(elem) or is_list(elem),
-       do: Jamdb.Oracle.json_library().encode!(elem)
+       do: Jason.encode!(elem)
   defp encode(elem), do: elem
 end
 

@@ -17,7 +17,8 @@ defmodule Jamdb.Oracle.Mixfile do
       {:ecto_sql, "~> 3.0"},
       {:timex, "~> 3.5"},
       {:ex_doc, "~> 0.21", only: :docs},
-      {:oranif, path: "../oranif2"}
+#      {:oranif, path: "../oranif2"},
+      {:oranif, github: "KonnexionsGmbH/oranif"}
     ]
   end
 

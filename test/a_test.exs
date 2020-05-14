@@ -9,13 +9,12 @@ defmodule ATest do
 #    @foreign_key_type :binary_id
 #    @timestamps_opts [type: :utc_datetime_usec]
 
-    schema "foo" do
-      field :value, :boolean
+    schema "schema_migrations" do
+      field :version, :integer
     end
   end
 
   test "foo" do
-    IO.inspect TestRepo.insert(%A{value: false}, on_conflict: :nothing)
     IO.inspect TestRepo.all(A)
   end
 end

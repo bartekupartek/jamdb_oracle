@@ -175,6 +175,10 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     {:ok, NaiveDateTime.to_date(v)}
   end
 
+  def date_decode(%{day: day, month: month, year: year}) do
+    Date.new(year, month, day)
+  end
+
   defp bool_decode("0"), do: {:ok, false}
   defp bool_decode("1"), do: {:ok, true}
   defp bool_decode(0), do: {:ok, false}
@@ -184,7 +188,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   defp float_decode(%Decimal{} = decimal), do: {:ok, Decimal.to_float(decimal)}
   defp float_decode(x), do: {:ok, x}
 
-  defp json_decode(x) when is_binary(x), do: {:ok, Jamdb.Oracle.json_library().decode!(x)}
+  defp json_decode(x) when is_binary(x), do: {:ok, Jason.decode!(x)}
   defp json_decode(x), do: {:ok, x}
 
   defp array_decode(x) when is_binary(x), do: {:ok, :binary.bin_to_list(x)}
@@ -242,7 +246,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   def query(conn, query, params, opts) do
     case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
       {:ok, _, result} -> {:ok, result}
-      {:error, err} -> err
+      {:error, err} -> {:error, err}
     end
   end
 
@@ -254,6 +258,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     query
   end
 
+  @impl true
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
+      do: [unique: constraint]
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
+      do: [foreign_key: constraint]
+  def to_constraints(_),
+      do: []
+
   defdelegate all(query), to: Jamdb.Oracle.Query
   defdelegate update_all(query), to: Jamdb.Oracle.Query
   defdelegate delete_all(query), to: Jamdb.Oracle.Query
@@ -261,91 +273,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
   defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
   defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
-
-  @impl true
-  def to_constraints(_err), do: []
-
-  @impl true
-  def execute_ddl(err), do: error!(err)
-
-  @impl true
-  def ddl_logs(err), do: error!(err)
-
-  defp error!(msg) do
-    raise DBConnection.ConnectionError, "#{inspect(msg)}"
-  end
+  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
+  defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
 end
-
-#defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
-#  @moduledoc false
-#  require Logger
-#
-#  @behaviour Ecto.Adapters.SQL.Connection
-#
-#  @impl true
-#  def child_spec(opts) do
-#    DBConnection.child_spec(Jamdb.Oracle, opts)
-#  end
-#
-#  @impl true
-#  def execute(conn, query, params, opts) do
-#    DBConnection.execute(conn, query!(query, ""), params, opts)
-#  end
-#
-#  @impl true
-#  def prepare_execute(conn, name, query, params, opts) do
-#    DBConnection.prepare_execute(conn, query!(query, name), params, opts)
-#  end
-#
-#  @impl true
-#  def stream(conn, query, params, opts) do
-#    DBConnection.stream(conn, query!(query, ""), params, opts)
-#  end
-#
-#  # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
-#  @impl true
-#  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
-#    do: [unique: constraint]
-#  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
-#    do: [foreign_key: constraint]
-#  def to_constraints(_),
-#    do: []
-#
-#  @impl true
-#  def query(conn, query, params, opts) do
-#    q = query!(query, "")
-#    Logger.info(q.statement) # Always print executed SQL
-#
-#    case DBConnection.prepare_execute(conn, q, params, opts) do
-#      {:ok, _, result}  -> {:ok, result}
-#      {:error, err} -> {:error, err}
-#    end
-#  end
-#
-#  defp query!(sql, name) when is_binary(sql) or is_list(sql) do
-#    %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
-#  end
-#  defp query!({:batch, rows_count, sql}, name) do
-#    %Jamdb.Oracle.Query{
-#      statement: IO.iodata_to_binary(sql),
-#      name: name,
-#      batch: true,
-#      query_rows_count: rows_count
-#    }
-#  end
-#  defp query!(%{} = query, _name) do
-#    query
-#  end
-#
-#  defdelegate all(query), to: Jamdb.Oracle.Query
-#  defdelegate update_all(query), to: Jamdb.Oracle.Query
-#  defdelegate delete_all(query), to: Jamdb.Oracle.Query
-#  defdelegate insert(prefix, table, header, rows, on_conflict, returning), to: Jamdb.Oracle.Query
-#  defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
-#  defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
-#  defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
-#  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
-#  defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
-#  defdelegate to_constraints(err), to: Jamdb.Oracle.Query
-#  defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
-#end
