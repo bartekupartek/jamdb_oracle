@@ -288,6 +288,7 @@ defmodule Jamdb.Oracle do
 end
 
 defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
+  @time_marker {1000, 01, 01}
 
   def parse(query, _), do: query
   def describe(query, _), do: query
@@ -309,6 +310,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     end
   end
   defp decode({elem}) when is_number(elem), do: elem
+  defp decode({@time_marker, time}), do: to_time(time)
   defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
   defp decode({date, time, _}) when is_tuple(date), do: to_utc({date, time})
   defp decode(elem) when is_list(elem), do: to_binary(elem)
@@ -324,6 +326,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(false), do: 0
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
   defp encode(%DateTime{} = datetime), do: encode(DateTime.to_naive(datetime))
+  defp encode(%Time{} = time), do: {@time_marker, Time.to_erl(time)}
   defp encode(%NaiveDateTime{microsecond: {microsecond, 6}} = naive) do
     {{year, month, day}, {hour, minute, second}} = NaiveDateTime.to_erl(naive)
     {{year, month, day}, {hour, minute, second, microsecond}}
@@ -384,6 +387,8 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   defp to_utc({date, time}),
     do: DateTime.from_naive!(to_naive({date, time}), "Etc/UTC")
+
+  defp to_time(time), do: Time.from_erl!(time)
 
   defp parse_sec(sec),
     do: {trunc((sec - trunc(sec)) * 1000000) , 6}
