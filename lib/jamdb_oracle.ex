@@ -102,25 +102,30 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%{batch: true, query_rows_count: query_rows_count} = query, params, _opts, s) do
-    %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:batch, statement |> to_charlist, Enum.chunk_every(params, query_rows_count)}, []) do
-      {:ok, result} -> {:ok, query, result, s}
+  def handle_execute(%Jamdb.Oracle.Query{batch: true, query_rows_count: query_rows_count, statement: statement} = query, params, _opts, s) do
+    with {:ok, result} <- query(s, {:batch, to_charlist(statement), Enum.chunk_every(params, query_rows_count)}, []),
+         {:ok, _} <- auto_commit(s) do
+      {:ok, query, result, s}
+    else
       {:error, err} -> {:error, error!(err, statement), s}
       {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
-  def handle_execute(query, params, opts, s) do
-    %Jamdb.Oracle.Query{statement: statement} = query
+
+  def handle_execute(%Jamdb.Oracle.Query{statement: statement} = query, params, opts, s) do
     with returning <- Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end),
-      {:ok, result} <- query(s, statement |> to_charlist, Enum.concat(params, returning)),
-      {:ok, result} <- recv_execute(result, query) do
+      {:ok, result} <- query(s, to_charlist(statement), Enum.concat(params, returning)),
+      {:ok, result} <- recv_execute(result, query),
+      {:ok, _} <- auto_commit(s) do
         {:ok, query, result, s}
     else
       {:error, err} -> {:error, error!(err, statement), s}
       {:disconnect, err} -> {:disconnect, error!(err, statement), s}
     end
   end
+
+  defp auto_commit(%{mode: :idle} = s), do: query(s, 'COMMIT')
+  defp auto_commit(_s), do: {:ok, []}
 
   defp recv_execute(result, %Jamdb.Oracle.Query{result_types: nil}), do: {:ok, result}
   defp recv_execute(result, %Jamdb.Oracle.Query{result_types: []}), do: {:ok, result}
