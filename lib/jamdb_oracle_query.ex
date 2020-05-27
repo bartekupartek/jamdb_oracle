@@ -625,7 +625,7 @@ defmodule Jamdb.Oracle.Query do
     query = [if_do(command == :create_if_not_exists, :begin),
              "CREATE TABLE ",
              table_name, ?\s, ?(,
-             column_definitions(table, columns), pk_definition(columns, ", "), ?),
+             column_definitions(table, columns), pk_definition(table.name, columns, ", "), ?),
              options_expr(table.options),
              if_do(command == :create_if_not_exists, :end)]
     
@@ -643,7 +643,7 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl({:alter, %Table{} = table, changes}) do
     table_name = quote_table(table.prefix, table.name)
     query = ["ALTER TABLE ", table_name, ?\s,
-             column_changes(table, changes), pk_definition(changes, ", ADD ")]
+             column_changes(table, changes), pk_definition(table.name, changes, ", ADD ")]
 
     [query] ++
       comments_on("TABLE", table_name, table.comment) ++
@@ -695,7 +695,7 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl(keyword) when is_list(keyword),
     do: error!(nil, "keyword lists in execute are not supported")
 
-  defp pk_definition(columns, prefix) do
+  defp pk_definition(table_name, columns, prefix) do
     pks =
       for {_, name, _, opts} <- columns,
           opts[:primary_key],
@@ -703,7 +703,7 @@ defmodule Jamdb.Oracle.Query do
 
     case pks do
       [] -> []
-      _  -> [prefix, "PRIMARY KEY (", intersperse_map(pks, ", ", &quote_name/1), ")"]
+      _  -> [prefix, "CONSTRAINT", " #{table_name}_pkey ", "PRIMARY KEY (", intersperse_map(pks, ", ", &quote_name/1), ")"]
     end
   end
 
