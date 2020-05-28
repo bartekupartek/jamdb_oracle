@@ -828,7 +828,19 @@ defmodule Jamdb.Oracle.Query do
   defp default_expr(:error),
     do: []
 
-  defp index_columns(%Index{where: nil, columns: columns}), do: [?(, intersperse_map(columns, ", ", &index_expr/1), ?)]
+  defp index_columns(%Index{where: nil, columns: columns}) do
+    if Enum.count(columns) > 1 do
+      # Based on: https://stackoverflow.com/a/13045841/1059425
+      #
+      # We have to add where expr to unique index because in Postgres NULL value is distinct
+      # See: https://www.postgresqltutorial.com/postgresql-indexes/postgresql-unique-index/
+      where = columns |> Enum.map(fn x -> "#{x} IS NOT NULL" end) |> Enum.join(" AND ")
+      index_columns(%Index{where: where, columns: columns})
+    else
+      # One column uniq index works the same as in Postgres
+      [?(, intersperse_map(columns, ", ", &index_expr/1), ?)]
+    end
+  end
 
   # CREATE UNIQUE INDEX billing_items_name_index ON billing_items (
   #  case when provider_id IS NULL then id || ‘/‘ name end
@@ -838,11 +850,14 @@ defmodule Jamdb.Oracle.Query do
       "CASE WHEN ",
       where,
       " THEN ",
-      columns |> Enum.map(&index_expr/1) |> Enum.join(" || '/' || "),
+      uniq_index_expr(columns),
       " END",
       ?)
     ]
   end
+
+  defp uniq_index_expr(literal) when is_list(literal),
+    do: literal |> Enum.map(&index_expr/1) |> Enum.join(" || '/' || ")
 
   defp index_expr(literal) when is_binary(literal),
     do: literal
