@@ -925,7 +925,7 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:bigserial),           do: "integer"
   defp ecto_to_db(:integer),             do: "integer"
   defp ecto_to_db(:float),               do: "number"
-  defp ecto_to_db(:boolean),             do: "integer" #char(1)"
+  defp ecto_to_db(:boolean),             do: "number(1)" #was char(1)"
   defp ecto_to_db(:string),              do: "varchar2"
   defp ecto_to_db(:binary),              do: "clob"
   defp ecto_to_db(:text),                do: "clob"
