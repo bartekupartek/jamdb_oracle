@@ -288,8 +288,23 @@ defmodule Jamdb.Oracle.Query do
   defp join_qual(:full),  do: "FULL OUTER JOIN "
   defp join_qual(:cross), do: "CROSS JOIN "
 
-  # delete extra ()
-  defp join_parentheses([40, [40, expr, 41], 41]), do: [40, expr, 41]
+  # Handle and delete double () inside expr
+  defp join_parentheses([40, [40, expr, 41]=full, 41]), do: join_parentheses(full)
+  defp join_parentheses([40, expr, 41]=full) when is_list(expr) do
+    first = Enum.at(expr, 0)
+    last = Enum.at(expr, -1)
+    with true <- is_binary(first),
+         true <- is_binary(last),
+         first_letter = String.at(first, 0),
+         last_letter = String.at(last, -1),
+         true <- first_letter == "(",
+         true <- last_letter == ")" do
+      join_parentheses(expr)
+    else
+      _ ->
+        full
+    end
+  end
   defp join_parentheses(expr), do: expr
 
   defp where(%{wheres: wheres} = query, sources) do
