@@ -102,13 +102,13 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%Jamdb.Oracle.Query{batch: true, query_rows_count: query_rows_count, statement: statement} = query, params, _opts, s) do
+        def handle_execute(%Jamdb.Oracle.Query{batch: true, query_rows_count: query_rows_count, statement: statement} = query, params, _opts, s) do
     with {:ok, result} <- query(s, {:batch, to_charlist(statement), Enum.chunk_every(params, query_rows_count)}, []),
          {:ok, _} <- auto_commit(s) do
       {:ok, query, result, s}
     else
-      {:error, err} -> {:error, error!(err, statement), s}
-      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
+      {:error, err} -> {:error, error!(err, statement, params), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement, params), s}
     end
   end
 
@@ -119,8 +119,8 @@ defmodule Jamdb.Oracle do
       {:ok, _} <- auto_commit(s) do
         {:ok, query, result, s}
     else
-      {:error, err} -> {:error, error!(err, statement), s}
-      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
+      {:error, err} -> {:error, error!(err, statement, params), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement, params), s}
     end
   end
 
@@ -213,8 +213,8 @@ defmodule Jamdb.Oracle do
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
       {:ok, result} -> 
         {:halt, result, s}
-      {:error, err} -> {:error, error!(err, statement), s}
-      {:disconnect, err} -> {:disconnect, error!(err, statement), s}
+      {:error, err} -> {:error, error!(err, statement, params), s}
+      {:disconnect, err} -> {:disconnect, error!(err, statement, params), s}
     end
   end
   def handle_fetch(_query, _cursor, _opts, %{cursors: cursors} = s) do
@@ -272,9 +272,10 @@ defmodule Jamdb.Oracle do
     {:ok, s}
   end
 
-  defp error!(msg, query \\ nil)
-  defp error!(msg, query) when is_binary(msg), do: Jamdb.Oracle.Error.exception(message: msg, query: query)
-  defp error!(msg, query), do: msg |> inspect |> error!(query)
+  defp error!(msg, query \\ nil, params \\ [])
+  defp error!(msg, query, params) when is_binary(msg),
+    do: Jamdb.Oracle.Error.exception(message: msg, query: query, params: params)
+  defp error!(msg, query, params), do: msg |> inspect |> error!(query, params)
 
   @doc """
   Returns the configured JSON library.
