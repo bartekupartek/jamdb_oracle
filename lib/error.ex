@@ -1,24 +1,30 @@
 defmodule Jamdb.Oracle.Error do
-  defexception [:message, :oracle, :query]
+  defexception [:message, :oracle, :query, :params]
 
   def exception(opts) do
     message = Keyword.get(opts, :message)
     query = Keyword.get(opts, :query)
+    params = Keyword.get(opts, :params)
 
     oracle = build_meta(message)
-    message = build_message(query, message)
+    message = build_message(query, message, params)
 
-    %Jamdb.Oracle.Error{oracle: oracle, message: message, query: query}
+    %Jamdb.Oracle.Error{oracle: oracle, message: message, query: query, params: params}
   end
 
-  defp build_message(nil, message), do: message
-  defp build_message(query, message) do
+  defp build_message(query, message, params) do
     IO.iodata_to_binary([
       message,
-      "\n\n",
-      query
+      build_query_message(query),
+      build_bind_vars_messsage(params)
     ])
   end
+
+  defp build_query_message(nil), do: []
+  defp build_query_message(query), do: ["\n\n", "Query: #{query}"]
+
+  defp build_bind_vars_messsage([]), do: []
+  defp build_bind_vars_messsage(params), do: ["\n\n", "Bind Variables: #{inspect(params)}"]
 
   defp build_meta(message) do
     code = %{oracle_code: parse_error_code(message)}
