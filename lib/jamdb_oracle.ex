@@ -57,24 +57,7 @@ defmodule Jamdb.Oracle do
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
   defp stmt({:batch, sql, params}, _), do: {:batch, sql, params}
-  defp stmt(sql, params), do: change_pagination_params_order(sql, params)
-
-  # The problem is in Oracle LIMIT\OFFSET have different order than in PG
-  @pagination ~r/OFFSET .+ ROWS FETCH NEXT .+ ROWS ONLY/i
-  defp change_pagination_params_order(sql, params) do
-    if String.match?(IO.iodata_to_binary(sql), @pagination) do
-      size = length(params)
-
-      # Change order of the last two elements
-      new_params =
-        params
-        |> List.replace_at(size - 1, Enum.at(params, size - 2))
-        |> List.replace_at(size - 2, Enum.at(params, size - 1))
-      {sql, new_params}
-    else
-      {sql, params}
-    end
-  end
+  defp stmt(sql, params), do: {sql, params}
 
   @impl true
   def connect(opts) do
