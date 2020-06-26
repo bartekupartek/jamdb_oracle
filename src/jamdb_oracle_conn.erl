@@ -45,8 +45,7 @@ connect(Opts, Tout) ->
     ReadTout    = proplists:get_value(read_timeout, Opts, ?DEF_READ_TIMEOUT),
     Cset        = proplists:get_value(charset, Opts, utf8),
     Charset     = proplists:get_value(Cset, ?CHARSET, ?UTF8_CHARSET),
-    SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
-            {nodelay, true}, {keepalive, true}]++SocketOpts,
+    SockOpts = [{packet, raw}, {mode, binary}, {active, false}]++SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
@@ -356,6 +355,7 @@ get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Typ
 get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
+get_param(type, {"WITH", [], Fetch}) -> {select, Fetch};
 get_param(type, {_Value, [], _Fetch}) -> {change, 0};
 get_param(type, {_Value, _Bind, _Fetch}) -> {return, 0};
 get_param(type, {_Type, fetch}) -> fetch;

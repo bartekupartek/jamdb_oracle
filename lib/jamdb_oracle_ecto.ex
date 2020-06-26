@@ -148,10 +148,16 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   """
 
-  use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
+  use Ecto.Adapters.SQL, driver: :jamdb_oracle, migration_lock: nil
 
   @behaviour Ecto.Adapter.Storage
   @behaviour Ecto.Adapter.Structure
+
+  def dumpers({:embed, _}, type), do: [&Ecto.Adapters.SQL.dump_embed(type, &1)]
+  def dumpers({:map, _}, type),   do: [&Ecto.Adapters.SQL.dump_embed(type, &1)]
+  def dumpers(:binary_id, type),  do: [type, Ecto.UUID]
+  def dumpers(:date, type),       do: [type, &Timex.format(&1, "{0D}-{Mshort}-{YYYY}")]
+  def dumpers(_, type),           do: [type]
 
   @impl true
   def loaders({:array, _}, type), do: [&array_decode/1, type]
@@ -161,7 +167,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def loaders(:float, type),      do: [&float_decode/1, type]
   def loaders(:boolean, type),    do: [&bool_decode/1, type]
   def loaders(:binary_id, type),  do: [Ecto.UUID, type]
+  def loaders(:date, type),  do: [&date_decode/1, type]
   def loaders(_, type),           do: [type]
+
+  def date_decode(%NaiveDateTime{} = v) do
+    {:ok, NaiveDateTime.to_date(v)}
+  end
 
   defp bool_decode("0"), do: {:ok, false}
   defp bool_decode("1"), do: {:ok, true}
@@ -199,11 +210,11 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   end
 
   defp err, do: {:error, false}
-
 end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @moduledoc false
+  require Logger
 
   @behaviour Ecto.Adapters.SQL.Connection
 
@@ -227,9 +238,21 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     DBConnection.stream(conn, query!(query, ""), params, opts)
   end
 
+  # Inspired by: ecto_sql/lib/ecto/adapters/postgres/connection.ex
+  @impl true
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :unique_violation, constraint: constraint}}),
+    do: [unique: constraint]
+  def to_constraints(%Jamdb.Oracle.Error{oracle: %{code: :foreign_key_violation, constraint: constraint}}),
+    do: [foreign_key: constraint]
+  def to_constraints(_),
+    do: []
+
   @impl true
   def query(conn, query, params, opts) do
-    case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
+    q = query!(query, "")
+    Logger.info(q.statement) # Always print executed SQL
+
+    case DBConnection.prepare_execute(conn, q, params, opts) do
       {:ok, _, result}  -> {:ok, result}
       {:error, err} -> {:error, err}
     end
@@ -237,6 +260,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
 
   defp query!(sql, name) when is_binary(sql) or is_list(sql) do
     %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
+  end
+  defp query!({:batch, rows_count, sql}, name) do
+    %Jamdb.Oracle.Query{
+      statement: IO.iodata_to_binary(sql),
+      name: name,
+      batch: true,
+      query_rows_count: rows_count
+    }
   end
   defp query!(%{} = query, _name) do
     query
@@ -253,5 +284,4 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
   defdelegate to_constraints(err), to: Jamdb.Oracle.Query
   defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
-
 end

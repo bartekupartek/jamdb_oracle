@@ -570,7 +570,7 @@ decode_date(<<Century,Year,Mon,Day,Hour,Min,Sec>>) ->
      {(Hour - 1),(Min - 1),(Sec - 1)}};
 decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
     {Date,{Hour,Min,Sec}} = decode_date(Data),
-    {Date,{Hour,Min,Sec + Ms / 1.0e9}};
+    {Date,{Hour,Min,Sec,Ms}};
 decode_date(<<Data:11/binary,H,M>>) ->
     erlang:append_element(decode_date(Data),
     case (H band -128) of
