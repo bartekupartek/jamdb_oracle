@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.4.0"
+  @vsn "0.4.2"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -50,6 +50,7 @@ defmodule Jamdb.Oracle do
       {:ok, [{:proc_result, _, msg}]} -> {:error, msg}
       {:ok, [{:affected_rows, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}}
       {:ok, result} -> {:ok, result}
+      {:error, :local, _} -> {:error, "Data is incomplete. Pass :read_timeout as connection parameter."}
       {:error, _, err} -> {:disconnect, err}
     end
   end
@@ -301,14 +302,23 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode({elem}) when is_number(elem), do: elem
   defp decode({@time_marker, time}), do: to_time(time)
   defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
+  defp decode({date, time, tz}) when is_tuple(date) and is_list(tz), do: to_date({date, time, tz})
   defp decode({date, time, _}) when is_tuple(date), do: to_utc({date, time})
   defp decode(elem) when is_list(elem), do: to_binary(elem)
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
-  def encode(_, params, _) do
-    Enum.map(params, fn elem -> encode(elem) end)
+  def encode(_, params, opts) do
+    types = Enum.map(Keyword.get(opts, :in, []), fn elem -> elem end)
+    Enum.map(encode(params, types), fn elem -> encode(elem) end)
   end
+
+  defp encode(params, []), do: params
+  defp encode([%Ecto.Query.Tagged{type: :binary} = elem | next1], [_type | next2]),
+    do: [ elem | encode(next1, next2)]
+  defp encode([elem | next1], [type | next2]) when type in [:binary, :binary_id, Ecto.UUID],
+    do: [ %Ecto.Query.Tagged{value: elem, type: :binary} | encode(next1, next2)]
+  defp encode([elem | next1], [_type | next2]), do: [ elem | encode(next1, next2)]
 
   defp encode(nil), do: :null
   defp encode(true), do: 1
@@ -376,6 +386,11 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   defp to_utc({date, time}),
     do: DateTime.from_naive!(to_naive({date, time}), "Etc/UTC")
+
+  defp to_date({{year, month, day}, {hour, min, sec}, tz}),
+    do: %DateTime{year: year, month: month, day: day, hour: hour, minute: min,
+	second: trunc(sec), microsecond: parse_sec(sec), time_zone: to_binary(tz),
+	zone_abbr: "UTC", utc_offset: 0, std_offset: 0}
 
   defp to_time(time), do: Time.from_erl!(time)
 

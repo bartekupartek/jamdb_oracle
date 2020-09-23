@@ -14,9 +14,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
    * Using bind variables:
 
-      `{"select 1+:1, sysdate, rowid from dual where 1=:1"`, `[1]}`
-
-      `{"insert into tabl values (:1)"`, `[<<16#E7,16#99,16#BE>>]}`
+      `{"insert into tabl values (:1)", [<<16#E7,16#99,16#BE>>]}`
    * Calling stored procedure:
 
       `{"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]}`
@@ -29,8 +27,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
    * Using returning clause:
 
       `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, :number}]}`
-
-      `YourApp.Repo.insert_all(Post,[[id: 100]], [returning: [:created_at], out: [:date]])`
    * Update batching:
 
       `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
@@ -78,7 +74,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   ### Output parameters
 
-  Using syntax for keyword lists: `[{:out, :cursor}]`, `[out: :cursor]`
+  * Calling stored procedure or function: `[{:out, :number}, {:out, :varchar}]`
+  * Using returning clause: `[{:out, :number}, {:out, :date}]`
 
   Oracle types                     | Literal syntax in params
   :------------------------------- | :-----------------------
@@ -91,6 +88,10 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `TIMESTAMP WITH TIME ZONE`       | `:timestamptz`
   `SYS_REFCURSOR`                  | `:cursor`
 
+  ### Input parameters
+
+  Using query options: `[in: [:number, :binary]]`
+
   ### Primitive types
 
   The primitive types are:
@@ -100,9 +101,11 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:id`, `:integer`       | `NUMBER (*,0)`, `INTEGER`        | 1, 2, 3
   `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
-  `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
-  `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
-  `:string`, `:binary`    | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto), 'E799BE'
+  `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
+  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
+  `:binary`               | `RAW`, `BLOB`                    | <<0xE7,0x99,0xBE>>, 'E799BE'
+  `:binary`               | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto)
+  `:binary_id`,`Ecto.UUID`| `RAW`, `BLOB`                    | [`Ecto.UUID`](https://hexdocs.pm/ecto)
   `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
   `:map`                  | `CLOB`, `NCLOB`                  | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
@@ -123,8 +126,13 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
       iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1,sysdate,rowid from dual where 1=:1 ", [1])
       {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
 
-      iex> binary = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
-      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [binary])
+      iex> bin = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
+      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin])
+      
+      iex> bin = <<0xE7,0x99,0xBE>>
+      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin]], [in: [:binary]])
+
+      iex> YourApp.Repo.insert_all(YourSchema,[[id: 100]], [returning: [:created_at], out: [:date]])
 
   Imagine you have this migration:
 
@@ -161,8 +169,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   @impl true
   def loaders({:array, _}, type), do: [&array_decode/1, type]
-  def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
-  def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
+  def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
+  def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
   def loaders(:map, type),        do: [&json_decode/1, type]
   def loaders(:float, type),      do: [&float_decode/1, type]
   def loaders(:boolean, type),    do: [&bool_decode/1, type]
@@ -254,6 +262,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
 
     case DBConnection.prepare_execute(conn, q, params, opts) do
       {:ok, _, result}  -> {:ok, result}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  @impl false
+  def explain_query(conn, query, params, opts) do
+    case query(conn, IO.iodata_to_binary(["EXPLAIN PLAN FOR ", query]), params, opts) do
+      {:ok, _result} -> query(conn, "SELECT * FROM table(DBMS_XPLAN.DISPLAY())", params, opts)
       {:error, err} -> {:error, err}
     end
   end
