@@ -160,7 +160,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def dumpers(_, type),           do: [type]
 
   @impl true
-  def loaders({:array, _}, type), do: [&array_decode/1, type]
+  def loaders({:array, _}, type), do: [&json_decode/1, type]
   def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
   def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
   def loaders(:map, type),        do: [&json_decode/1, type]
@@ -185,9 +185,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   defp json_decode(x) when is_binary(x), do: {:ok, Jamdb.Oracle.json_library().decode!(x)}
   defp json_decode(x), do: {:ok, x}
-
-  defp array_decode(x) when is_binary(x), do: {:ok, :binary.bin_to_list(x)}
-  defp array_decode(x), do: {:ok, x}
 
   @impl true
   def storage_up(_opts), do: err()
